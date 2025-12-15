@@ -1199,7 +1199,40 @@ class RayPPOTrainer:
                         reward_extra_infos_dict: dict[str, list]
                         if self.config.reward_model.launch_reward_fn_async:
                             reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
-                        batch.batch["token_level_scores"] = reward_tensor
+
+
+                        # [ALGORITHM MODIFICATION] start
+
+                        # Overwrite reward logic: Use Normalized Reference Log Probability
+                        if "ref_log_prob" in batch.batch.keys():
+                            ref_log_probs = batch.batch['ref_log_prob']
+                            response_mask = batch.batch['response_mask']
+                            
+                            # 1. 计算 LogProbs 之和 (只考虑 Response 部分)
+                            sum_log_probs = (ref_log_probs * response_mask).sum(dim=-1)
+                            
+                            # 2. 计算序列长度 (Token Count)
+                            seq_lengths = response_mask.sum(dim=-1)
+                            
+                            # 3. 计算归一化 Mean LogProb (加上 1e-8 防止除零)
+                            avg_ref_log_prob = sum_log_probs / (seq_lengths + 1e-8)
+                            
+                            # 4. 打印调试信息, 确保值是合理的 (通常在 -2.0 到 -0.5 之间)
+                            if self.global_steps % 10 == 0:
+                                print(f"[AlgoMod] Step {self.global_steps}: Using Ref-LogProb Reward. Mean Score: {avg_ref_log_prob.mean().item():.4f}")
+
+                            # 5. 覆盖 token_level_scores
+                            # 注意: 我们需要保持维度兼容, unsqueeze(-1) 变为 [Batch, 1]
+                            # GRPO 的 advantage 计算会自动进行广播
+                            batch.batch["token_level_scores"] = avg_ref_log_prob.unsqueeze(-1)
+                        else:
+                            # Fallback if ref policy is not enabled (should warn user)
+                            batch.batch["token_level_scores"] = reward_tensor
+                            print("[AlgoMod] Warning: 'ref_log_prob' not found. Using default rewards.")
+
+                        # [ALGORITHM MODIFICATION] end
+
+                        # batch.batch["token_level_scores"] = reward_tensor
 
                         if reward_extra_infos_dict:
                             batch.non_tensor_batch.update({k: np.array(v) for k, v in reward_extra_infos_dict.items()})
