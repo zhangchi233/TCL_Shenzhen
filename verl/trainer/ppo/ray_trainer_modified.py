@@ -210,67 +210,37 @@ def compute_advantage(
     if "response_mask" not in data.batch.keys():
         data.batch["response_mask"] = compute_response_mask(data)
     # prepare response group
-    if adv_estimator == AdvantageEstimator.GAE:
-        # Compute advantages and returns using Generalized Advantage Estimation (GAE)
-        advantages, returns = core_algos.compute_gae_advantage_return(
-            token_level_rewards=data.batch["token_level_rewards"],
-            values=data.batch["values"],
-            response_mask=data.batch["response_mask"],
-            gamma=gamma,
-            lam=lam,
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
-        if config.get("use_pf_ppo", False):
-            data = core_algos.compute_pf_ppo_reweight_data(
-                data,
-                config.pf_ppo.get("reweight_method"),
-                config.pf_ppo.get("weight_pow"),
-            )
-    elif adv_estimator == AdvantageEstimator.GRPO:
-        # Initialize the mask for GRPO calculation
-        grpo_calculation_mask = data.batch["response_mask"]
+    
+    # Initialize the mask for GRPO calculation
+    grpo_calculation_mask = data.batch["response_mask"]
 
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
-            token_level_rewards=data.batch["token_level_rewards"],
-            response_mask=grpo_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
-    elif adv_estimator == AdvantageEstimator.Unsupervised_GRPO:
-        # Initialize the mask for GRPO calculation
-        grpo_calculation_mask = data.batch["response_mask"]
+    # Call compute_grpo_outcome_advantage with parameters matching its definition
+    # obtain cur token_level prob
+    cur_prob_logs = data.batch["rollout_log_probs"]
+    B, T = cur_prob_logs.shape
+    assert B//num_repeat == data.batch.batch_size[0], f"{B=}, {num_repeat=}, {data.batch.batch_size=}"
+    cur_prob_logs = cur_prob_logs.view(B // num_repeat, num_repeat, T)
+    cur_prob_mean = cur_prob_logs.mean(dim=1)  # (B//num_repeat, T)
+    cur_prob_std = cur_prob_logs.std(dim=1)  # (B//num_repeat, T)
+    
+    token_level_reward = cur_prob_logs-cur_prob_mean.unsqueeze(1)
+    token_level_reward = token_level_reward / (cur_prob_std.unsqueeze(1) + 1e-8)
+    token_level_reward = token_level_reward.view(B, T)
+    data.batch["token_level_rewards"] = token_level_reward
 
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
-            token_level_rewards=data.batch["token_level_rewards"],
-            response_mask=grpo_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
-    else:
-        # handle all other adv estimator type other than GAE and GRPO
-        adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
-        adv_kwargs = {
-            "token_level_rewards": data.batch["token_level_rewards"],
-            "response_mask": data.batch["response_mask"],
-            "config": config,
-        }
-        if "uid" in data.non_tensor_batch:  # optional
-            adv_kwargs["index"] = data.non_tensor_batch["uid"]
-        if "reward_baselines" in data.batch:  # optional
-            adv_kwargs["reward_baselines"] = data.batch["reward_baselines"]
+    
 
-        # calculate advantage estimator
-        advantages, returns = adv_estimator_fn(**adv_kwargs)
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
+
+
+    advantages, returns = core_algos.compute_grpo_outcome_advantage(
+        token_level_rewards=data.batch["token_level_rewards"],
+        response_mask=grpo_calculation_mask,
+        index=data.non_tensor_batch["uid"],
+        norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+    )
+    data.batch["advantages"] = advantages
+    data.batch["returns"] = returns
+
     return data
 
 
@@ -1162,7 +1132,18 @@ class RayPPOTrainer:
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
-                   
+                    with marked_timer("reward", timing_raw, color="yellow"):
+                        # compute reward model score
+                        if self.use_rm and "rm_scores" not in batch.batch.keys():
+                            reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            batch = batch.union(reward_tensor)
+
+                        if self.config.reward_model.launch_reward_fn_async:
+                            future_reward = compute_reward_async.remote(
+                                data=batch, config=self.config, tokenizer=self.tokenizer
+                            )
+                        else:
+                            reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
@@ -1181,18 +1162,6 @@ class RayPPOTrainer:
                             from verl.utils.debug.metrics import calculate_debug_metrics
 
                             metrics.update(calculate_debug_metrics(batch))
-                    with marked_timer("reward", timing_raw, color="yellow"):
-                        # compute reward model score
-                        if self.use_rm and "rm_scores" not in batch.batch.keys():
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
-
-                        if self.config.reward_model.launch_reward_fn_async:
-                            future_reward = compute_reward_async.remote(
-                                data=batch, config=self.config, tokenizer=self.tokenizer
-                            )
-                        else:
-                            reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
                     if self.use_reference_policy:
                         # compute reference log_prob
