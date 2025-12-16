@@ -1,0 +1,1935 @@
+[
+    {
+        "type": "text",
+        "text": "Bootstrapping Grounded Chain-of-Thought in Multimodal LLMs for Data-Efficient Model Adaptation ",
+        "text_level": 1,
+        "bbox": [
+            150,
+            130,
+            846,
+            174
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Jiaer Xia1 Bingkui Tong2 Yuhang Zang3 Rui Shao4 Kaiyang Zhou1B 1Hong Kong Baptist University 2Sichuan University 3Shanghai AI Lab 4Harbin Institute of Technology (Shenzhen) https://github.com/maifoundations/GCoT ",
+        "bbox": [
+            151,
+            202,
+            848,
+            273
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Abstract ",
+        "text_level": 1,
+        "bbox": [
+            251,
+            309,
+            325,
+            325
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Multimodal Large Language Models (MLLMs) have demonstrated remarkable capabilities in interpreting images using natural language. However, without using largescale datasets for retraining, these models are difficult to adapt to specialized vision tasks, e.g., chart understanding. This problem is caused by a mismatch between pre-training and downstream datasets: pre-training datasets primarily concentrate on scenes and objects but contain limited information about specialized, non-object images, such as charts and tables. In this paper, we share an interesting finding that training an MLLM with Chain-of-Thought (CoT) reasoning data can facilitate model adaptation in specialized vision tasks, especially under data-limited regimes. However, we identify a critical issue within CoT data distilled from pre-trained MLLMs, i.e., the data often contains multiple factual errors in the reasoning steps. To address the problem, we propose Grounded Chain-of-Thought (GCoT), a simple bootstrapping-based approach that aims to inject grounding information (i.e., bounding boxes) into CoT data, essentially making the reasoning steps more faithful to input images. We evaluate our approach on five specialized vision tasks, which cover a variety of visual formats including charts, tables, receipts, and reports. The results demonstrate that under data-limited regimes our approach significantly improves upon fine-tuning and distillation. ",
+        "bbox": [
+            93,
+            342,
+            482,
+            717
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "1. Introduction ",
+        "text_level": 1,
+        "bbox": [
+            94,
+            746,
+            220,
+            762
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "In recent years, Large Language Models (LLMs) have dramatically reshaped the landscape of AI research, including both natural language processing and computer vision. In computer vision, LLMs are typically treated as a decoder; they are combined with a vision encoder in such a way that the output of an LLM is conditioned on the vision encoder’s output (namely image features) and a natural language prompt [1, 11]. Such hybrid models are known as Multimodal Large Language Models (MLLMs) as they can handle both image and text modalities. Although MLLMs excel at interpreting images using natural language, they often fail to adapt to specialized tasks like chart understanding without retraining on large-scale, taskspecific datasets [5, 20, 30]. This is due to a mismatch between pre-training and downstream datasets: MLLMs are mostly pre-trained on object-centric Internet images; as a consequence, MLLMs become inherently weak at handling specialized, non-object images, such as charts and tables. ",
+        "bbox": [
+            93,
+            772,
+            480,
+            877
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "image",
+        "img_path": "images/188120bdfd1345e58c055c1e2667e1f2e321cd653d3274daefbee767d0af9e71.jpg",
+        "image_caption": [
+            "spite giving the correct answer. In addition to reasoning, the grounded CoT (GCoT) uses bounding boxes to ground key information in the image, which can be self-verified by the model and help minimize factual errors. "
+        ],
+        "image_footnote": [],
+        "bbox": [
+            550,
+            306,
+            870,
+            803
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "discarded",
+        "text": "BCorresponding author ",
+        "bbox": [
+            106,
+            888,
+            233,
+            900
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "discarded",
+        "text": "",
+        "bbox": [
+            22,
+            286,
+            60,
+            714
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            93,
+            92,
+            482,
+            257
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "In this work, we argue that MLLMs that are capable of reasoning can adapt more quickly and efficiently to specialized vision tasks. The intuition is simple: reasoning-capable MLLMs can infer underlying structures, relationships, and logical patterns in data; this allows them to generalize better when it comes to novel data distributions and perform robustly even when exposed to limited training data. As a proof-of-concept, we use Chain-of-Thought (CoT) [29] reasoning data distilled from a pre-trained, third-party MLLM to fine-tune our model directly on downstream tasks under few-shot settings. The benchmark covers a wide range of visual formats including charts, tables, receipts, and reports. The average results (shown in Fig. 3 (a)) indicate that using around 16 labeled examples the model can beat the zeroshot and fine-tuning baselines by a decent margin. However, by digging into the distilled CoT data, we find a significant limitation: though the final answers may be correct, the intermediate reasoning steps often contain multiple factual errors. Fig. 1 shows an example where the intermediate reasoning steps in the CoT data contain wrongly-detected prices: the orange cone shell costs $\\$ 0.72$ rather than $\\$ 1.24$ , and the white spindle shell costs $\\$ 0.60$ rather than $\\$ 0.16$ . ",
+        "bbox": [
+            93,
+            262,
+            482,
+            593
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "To address the limitation in distilled CoT data, we propose Grounded Chain-of-Thought (GCoT), a simple approach that aims to inject grounding information into CoT data with the hope that the reasoning steps become more faithful to input images and therefore the model trained with such data generalizes better. Since it is challenging to collect grounded CoT data, we propose a simple bootstrapping strategy to iteratively bootstrap an MLLM to generate grounding labels and refine them via self-verification. Specifically, we start with an MLLM pre-trained on visual grounding datasets and prompt it to produce bounding boxes for key information (e.g., numbers and objects) extracted from distilled CoT data. Then, we crop images using these bounding boxes and pass the resulting image patches to the model, which performs self-verification by comparing the contents with the pre-extracted key information. After a number of self-verification steps, the grounding information is combined with the CoT data for model finetuning. Fig. 1 (bottom) shows an example of our grounded CoT where the accurate localization information helps the model identify the correct prices of orange cone shell and white spindle shell. ",
+        "bbox": [
+            93,
+            598,
+            482,
+            898
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            92,
+            903,
+            121
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "To evaluate our approach, we build a benchmark that consists of five specialized vision datasets, targeting recognition on charts, tables, receipts, and reports. We compare our approach with several baselines including the zero-shot method, fine-tuning, and distillation (which directly finetunes an MLLM with distilled CoT data). The results show that our approach significantly outperforms these baselines under data-limited regimes, demonstrating the effectiveness of grounded CoT data. ",
+        "bbox": [
+            516,
+            122,
+            903,
+            256
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "In summary, we make the following contributions: 1) We find that CoT data can facilitate model adaptation from generic to specialized vision tasks. We also identify a critical issue in CoT data distilled from pre-trained MLLMs, i.e., the reasoning steps often contain multiple factual errors. 2) To correct factual errors in distilled CoT data, we propose a bootstrapping-based approach that injects selfverified grounding information into CoT to make the reasoning steps more faithful to input images. 3) We provide extensive results on five specialized vision tasks to demonstrate that grounded CoT is the key to enabling data-efficient model adaptation. ",
+        "bbox": [
+            516,
+            258,
+            903,
+            438
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "2. Related Work ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            449,
+            653,
+            465
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Multimodal LLMs To endow LLMs with the capability to understand image pixels, the community has conducted numerous studies to integrate LLMs with vision models [13, 28, 32]. The most common approach is to use a well-trained vision model for feature extraction. The image features are then projected onto the text space through finetuning a projection layer that connects the vision model with an LLM. Following this practice, LLaVA [14] trains the projection layer using data from the CC-3M dataset [27], which consists of millions of images and captions crawled from the Internet. Similarly, models like BLIP2 [11] and MiniGPT [2] further incorporate data from broader sources like LAION400M [25], Visual Genome [10], and SBU [22] into the training pipeline. It is worth noting that the data widely used for modality alignment is dominated by natural images, which mainly focus on scenes and objects. As a consequence, the model trained with such data becomes weak at recognizing specialized visual formats, such as charts and tables. Our work addresses this problem with a data-efficient model adaptation approach, which allows pretrained MLLMs to be quickly adapted to specialized vision tasks with few labeled question-answer pairs. ",
+        "bbox": [
+            516,
+            476,
+            905,
+            806
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Chart Understanding Charts are rich in information and commonly encountered in daily life, playing a crucial role in data visualization across various domains, including business, finance, healthcare, and scientific research. This has fueled a growing interest in developing chart-based LLMs to automate chart interpretation, question answering, and reasoning tasks. Since MLLMs are naturally weak at chart understanding due to lack of exposure to such data during pre-training, many studies have built chart datasets for model adaptation. ChartLLaMA [5] developed a dataset of 160,000 chart samples. ChartAssistant [20] took a more extensive approach by curating a large-scale dataset containing 39 million chart-text annotated data points. ChartGemma [19] developed a chart understanding and reasoning model using 122,857 chart data points. While these datasets have significantly contributed to model adaptation, they come with substantial costs in terms of data collection, annotation, and computational resources. To facilitate model adaptation and reduce the overall production cost, it is imperative to explore data-efficient adaptation methods for fine-tuning MLLMs. Our work provides a timely solution to address this problem. ",
+        "bbox": [
+            516,
+            825,
+            903,
+            900
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "image",
+        "img_path": "images/b79f656b835363eb93a5393dd074f7eebe1d725bd66e1ee3c10b93ee495f4ba6.jpg",
+        "image_caption": [
+            "Figure 2. Overview of GCoT generation process. For each sampled training data point, we start by generating a distilled CoT using a third-party model. Key information from the CoT is then extracted to form a set of sub-questions, which are fed into a bootstrapping loop. This loop iteratively generates bounding boxes and filters out the correct ones to improve the model’s grounding capability. The finalized filtered bounding boxes are then used to create the GCoT. "
+        ],
+        "image_footnote": [],
+        "bbox": [
+            91,
+            89,
+            903,
+            319
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            93,
+            414,
+            482,
+            670
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Chain-of-Thought Reasoning The community has observed that CoT reasoning can significantly improve LLMs’ performance across a wide range of reasoning tasks [9, 29]. By breaking down complex problems into intermediate reasoning steps, CoT enables models to tackle more sophisticated queries that require logical deduction. Meanwhile, existing research has also shown that CoT data is not only beneficial for improving reasoning accuracy but also plays a crucial role in aligning LLMs with desired behaviors and response patterns [24]. One straightforward approach to leveraging CoT in pre-trained LLMs is to prompt them to perform reasoning directly. However, this approach comes with inherent limitations: there is no guarantee that the generated reasoning is always correct, factual, or logically consistent. To address this issue, verification methods have been actively studied in natural language processing, where various techniques have been proposed to check the correctness of CoT reasoning [3, 12, 21]. However, extending CoT verification to vision-based tasks remains an open question. Our work fills this gap by combining CoT with grounded bounding boxes, which can be verified by a detection-based MLLM. ",
+        "bbox": [
+            93,
+            689,
+            480,
+            900
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            414,
+            905,
+            534
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "3. Methodology ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            554,
+            645,
+            570
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "We propose Grounded Chain-of-Thought (GCoT), an approach that bootstraps an MLLM to generate and refine grounded Chain-of-Thought (CoT). This is motivated by the hypothesis that MLLMs with the ability to perform CoT reasoning can learn new tasks in a faster and more efficient way. A straightforward way is to distill CoT data from a pre-trained MLLM, such as LLaMA 3.2 [4]. However, the generated CoT data may contain factual inaccuracies in the thinking process, which could negatively impact the training. Our idea is to inject grounding information, i.e., bounding boxes, into CoT, which allows the model to perform self-verification, thereby filtering out incorrect and low-quality CoT data to reduce noisy content. ",
+        "bbox": [
+            516,
+            582,
+            903,
+            776
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "In general, the GCoT approach consists of three stages: pre-training, bootstrapping, and fine-tuning. First, we pretrain a base MLLM using visual grounding data. This helps the model develop localization ability, i.e., enabling the model to generate bounding boxes that localize key text information in images. Second, given a downstream task with limited training data (e.g., 8 question-answer pairs), we prompt a pre-trained third-party MLLM to generate initial ",
+        "bbox": [
+            516,
+            780,
+            903,
+            900
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "image",
+        "img_path": "images/0b6e57aa5d3c40bc66e280113a1bc0aee328b3d5b588bc5484766dc9068a5a26.jpg",
+        "image_caption": [
+            "Table 1. Example from the self-verify process comparing positive and negative samples. Both the final answer and the reasoning process have been verified to ensure the accuracy of the selected sample. "
+        ],
+        "image_footnote": [],
+        "bbox": [
+            98,
+            87,
+            900,
+            333
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "CoT answers, to which we further inject bounding boxes bootstrapped from our model. Finally, we fine-tune our model on the grounded CoT data. See below for more detailed technical designs. ",
+        "bbox": [
+            93,
+            401,
+            480,
+            462
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "3.1. Pre-training for Visual Grounding ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            469,
+            390,
+            484
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "We first pre-train a base MLLM, e.g., LLaVA [13], using some visual grounding data. The goal is to enable the model to use bounding box to localize target(s) mentioned in a prompt, such as “where is the <target>” where the <target> could be a specific object like chair or a number displayed in the image. In terms of visual grounding data, one could repurpose object detection datasets by simply formulating each detection as a question-answer pair or combining existing VQA datasets that have already provided bounding boxes, such as Flickr30k [23] and Visual7W [34]. In our implementation, we directly adopt the VisCoT-7B model developed by Shao et al. [26]. VisCoT-7B was pretrained on 10 visual grounding datasets, which cover various domains such as text recognition, general VQA, inforgraphics understanding, and relation reasoning. ",
+        "bbox": [
+            93,
+            491,
+            482,
+            718
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "3.2. Generating Grounded Chain-of-Thought ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            724,
+            441,
+            741
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Initial CoT Existing training dataset for chart understanding mostly only contain a question and simple answer, lacking the detailed CoT. With the limited CoT, we first utilize a third-party model (e.g., LLaMA3.soning process. Given a training dataset $\\mathcal { D } = \\{ Q _ { i } , A _ { i } \\} _ { i = 1 } ^ { N }$ the third-party model will generate a CoT $C ( Q _ { i } )$ for each question $Q _ { i }$ . ",
+        "bbox": [
+            93,
+            747,
+            480,
+            852
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Bootstrapping For each CoT $C ( Q _ { i } )$ , we use the Natural Language Toolkit (NLTK) [15] to select meaningful nouns and numerical terms as targets. We then construct subquestions using the template “Where is the <target>?”, where $< t a r g e t >$ serves as a placeholder for each target, and such template format is designed to promote the model to generate the bounding box of the target. For each CoT $C ( Q _ { i } )$ , we generate a set of sub-questions $\\{ S _ { i , t } \\} _ { t = 1 } ^ { T _ { i } }$ , where $T _ { i }$ denotes the total number of targets in $C ( Q _ { i } )$ , and each sub-question $S _ { i , t }$ corresponds to the $t$ -th target. Using these sub-questions, we iteratively bootstrap the MLLM to generate grounding information and perform self-verification. In each iteration, the MLLM produces candidate bounding boxes $\\boldsymbol { B } _ { i , t }$ for each sub-question $S _ { i , t }$ , with the corresponding prompt “Please provide the bounding box coordinate of the region.”. We then crop the area defined by $\\boldsymbol { B } _ { i , t }$ , and leverage MLLM itself to process the isolated region, using the prompt “The content in this image is:” to detect the enclosed content. The identified content is compared to the original target object as a consistency check. Bounding boxes that consistently match the target are retained, while any discrepancies result in the automatic filtering of incorrect proposals. After each iteration, we obtain a set of correct bounding boxes corresponding to the sub-questions: ",
+        "bbox": [
+            93,
+            871,
+            480,
+            900
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            401,
+            905,
+            733
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "equation",
+        "img_path": "images/a1b68cd43d588a45b9efd1d09c449aad80e7366c27f46999011ba01d67a7c6a4.jpg",
+        "text": "$$\n\\boldsymbol { B } _ { i } = \\{ B _ { i , t } \\} _ { t = 1 } ^ { T _ { i } ^ { \\prime } } ,\n$$",
+        "text_format": "latex",
+        "bbox": [
+            655,
+            737,
+            764,
+            760
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "where $\\boldsymbol { B } _ { i , t }$ is the correct bounding box for $S _ { i , t }$ , and $T _ { i } ^ { \\prime }$ is the number of correct bounding boxes for each CoT $C ( Q _ { i } )$ We then use the collected correct bounding boxes to finetune the MLLM, enhancing its ability to accurately localize information within images. This iterative process allows the model to identify more bounding boxes in subsequent cycles, progressively refining its skills. Ultimately, the model will develop a robust grounding ability, capable of generating numerous accurate bounding boxes. ",
+        "bbox": [
+            516,
+            763,
+            903,
+            900
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Grounded CoT After performing the bootstrap process for a pre-determined number of iterations, we combine the CoT with the correct bounding boxes generated in the final iteration to produce the Grounded CoT (GCoT). Specifically, we append the coordinates of the correct bounding boxes directly after the corresponding targets in the CoT. This augmented GCoT is then used to fine-tune the MLLM, enabling it to reason before providing an answer and explicitly output grounding visual information as verifiable evidence. After this fine-tuning, we prompt the MLLM to generate new, high-quality GCoTs in response to the same questions. To guarantee the quality of the data, we prompt the MLLM to generate a batch of GCoTs and then verify the correctness of both the answers and bounding boxes, selecting the correct GCoT. For data augmentation, there will be three verified GCoTs selected for each question. ",
+        "bbox": [
+            93,
+            90,
+            482,
+            332
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "3.3. Fine-tuning with Grounded Chain-of-Thought ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            344,
+            480,
+            361
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "As the example show in Tab. 1, the self-verification process not only checks GCoT based on results but can also eliminate noisy data from the thinking process through box verification. The bounding box is verified like the process used in the bootstrapping loop, which evaluates the consistency between the contents of the box and the associated target text. We assess its consistency with the target by using MLLM to recognize the box’s contents and perform a consistency check. Finally, we retrain the MLLM to further enhance its performance using the newly generated GCoT, which expands the training data while ensuring quality. ",
+        "bbox": [
+            93,
+            367,
+            482,
+            532
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4. Experiments ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            549,
+            220,
+            566
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4.1. Datasets ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            575,
+            191,
+            590
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "We evaluate our approach, namely Grounded Chain-ofThought (GCoT), on five publicly available specialized computer vision datasets: ChartQA [18], TabMWP [17], SROIE [7], DVQA [8], and TAT-QA [33]. These datasets cover a variety of visual formats (i.e., charts, tables, receipts, and reports) across multiple domains, such as finance, science, industry, and mathematics. ChartQA comprises 20,882 charts, including bar, line, and pie charts, paired with 32,719 questions sourced from various sectors like economy and industry. TabMWP features 38,431 grade-level mathematical problems presented in tabular formats, focusing on mathematical reasoning through both free-text and multiple-choice questions. SROIE consists of 1,000 scanned receipt images and focuses on retrieving information from text-heavy document images. DVQA includes bar charts generated from raw data, addressing challenges related to data retrieval and structural comprehension. TAT-QA contains 16,552 questions based on 2,757 hybrid contexts derived from financial reports, with an emphasis on numerical reasoning using image-based tables ex",
+        "bbox": [
+            93,
+            598,
+            482,
+            900
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "tracted from PDFs. ",
+        "bbox": [
+            516,
+            92,
+            642,
+            106
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4.2. Evaluation ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            116,
+            633,
+            131
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "We mainly evaluate our approach under data-limited regimes as specialized vision tasks often contain limited labels. Specifically, we train the model using sample sizes of 8, 16, 32, 64, and 128 data points, respectively. To make sure our findings are reliable, we perform three independent random samplings for each sample size and average the results. The standard deviation of each result is also reported. Accuracy $( \\% )$ is chosen as the performance metric. ",
+        "bbox": [
+            516,
+            138,
+            905,
+            258
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4.3. Baseline Methods ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            268,
+            684,
+            284
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Our approach is compared with three baseline methods: 1) Zero-shot directly applies the model in a standard zeroshot setting without any update in the parameters. 2) Finetuning fine-tunes the model using the original questionanswer pairs provided by the benchmarking datasets. 3) Distillation fine-tunes the model using Chain-of-Thought (CoT) distilled from LLaMA 3.2 [4]. All these baseline methods use the same backbone as our approach. ",
+        "bbox": [
+            516,
+            290,
+            903,
+            410
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4.4. Implementation Details ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            421,
+            730,
+            436
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "We use VisCoT-7b [26] as the MLLM backbone, which was pre-trained on visual grounding datasets. The model can perform detection based on user prompts, such as where is the cat. Our GCoT is based on CoT distilled from LLaMA 3.2 [4]. All methods that involve fine-tuning are based on LoRA [6]. In terms of hyper-parameters, the rank and alpha in LoRA are set to 16 and 32, respectively. AdamW [16] is used as the optimizer, with a learning rate of $2 \\times 1 0 ^ { - 4 }$ Training is conducted for one epoch. The temperature value is set to 0.8 to encourage diversity when prompting our model to generate GCoT. For each question, we generate 3 GCoT data points. ",
+        "bbox": [
+            516,
+            443,
+            903,
+            622
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "4.5. Main Results ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            633,
+            650,
+            648
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "The results are shown in Fig. 3. We summarize our key observations below. ",
+        "bbox": [
+            516,
+            655,
+            903,
+            684
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "GCoT Consistently Outperforms Baselines It is clear that GCoT consistently outperforms all baseline methods across all datasets and training sample sizes. In particular, the green curve, representing GCoT, maintains a clear lead on every benchmarking dataset. This strongly justifies the effectiveness of adding grounding information to CoT. When using only 8 training samples, GCoT beats Zero-shot with a decent margin of around $2 \\%$ (in terms of average performance). Compared with training-based methods, i.e., Fine-tuning and Distillation, GCoT consistently outperforms them with significant margins. Even on the most challenging dataset, TAT-QA, which generally exhibits lower accuracy across all methods, GCoT still manages to outperform Fine-tuning and Distillation. The superiority of GCoT becomes more pronounced as the number of training samples increases. ",
+        "bbox": [
+            516,
+            704,
+            903,
+            900
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "image",
+        "img_path": "images/bc14cbe78cb9e13a39a8a6bca82e35b385a36a979a5e0ba8ffd3bd802aae300a.jpg",
+        "image_caption": [
+            "Figure 3. Main results on the five specialized vision datasets. Fine-tuning means directly fine-tuning the model with simple questionanswer pairs. Distillation means training the model with LLaMA distilled CoT data. All training-based methods are based on the same backbone and the LoRA method. Overall, the performance of GCoT surpasses the fine-tuning and distillation methods across all datasets and sample sizes. The shadow areas represent variance. "
+        ],
+        "image_footnote": [],
+        "bbox": [
+            102,
+            88,
+            897,
+            474
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            93,
+            569,
+            480,
+            614
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Distillation Improves Over Fine-tuning Distillation proves to be a more effective learning approach compared to Fine-tuning. Recall that the main difference between these two methods is that Distillation uses (distilled) CoT data while Fine-tuning relies on the original question-answer pairs. In general, the curves of Distillation stay above the curves of Fine-tuning (except when using low-shot samples on datasets like TabMWP and DVQA). When the sample size increases, the advantage of using CoT data compared to the simple question-answer pairs becomes clearer. ",
+        "bbox": [
+            93,
+            637,
+            482,
+            786
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Performance Improves with More Training Samples In general, the performance improves across all methods as the number of training samples increases, but the rate of improvement varies significantly. GCoT maintains a healthy upward trend when more training samples are used. Distillation also has an upward trend in most cases except on ",
+        "bbox": [
+            93,
+            810,
+            482,
+            900
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "ChartQA where the increasing momentum fades away when transitioning from 64 to 128 training samples. This is likely to be caused by the errors in distilled CoT data. When it comes to Fine-tuning, the results are drastically different: the accuracy remains relatively unchanged when more training data is available on ChartQA and TabMWP; this suggests that simple question-answer pairs have limitations and as a result the model does not gain new knowledge with more data. It is worth noting that on TabMWP the accuracy of Fine-tuning even decreases in the 128-sample-size case, which suggests that model overfits the small training data. ",
+        "bbox": [
+            516,
+            569,
+            905,
+            734
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "4.6. Ablation Studies and Analyses ",
+        "text_level": 1,
+        "bbox": [
+            517,
+            742,
+            782,
+            757
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Self-verification of GCoT To evaluate the impact of selfverification in GCoT, we conducted an ablation study with three configurations: (1) using augmentation and box verification, (2) without augmentation (single GCoT per sample), and (3) without box verification (select the augmented data by verifying only the final answer). The results, shown in Tab. 2, reveal the significant impact of both augmentation and box verification mechanisms on the model’s performance. When augmentation is disabled, performance drops by an average of 1.63 to 2.36 percentage points across various sample sizes. Without box verification, the accuracy drops even further, with performance reductions ranging from 5.94 to 10.36 percentage points, which indicates that relying solely on final answer checks is insufficient for filtering out quality CoT data and noisy CoT data can significantly impair alignment performance. These findings highlight the importance of generating multiple CoT annotations and verifying their correctness through box verification to ensure robust performance. ",
+        "bbox": [
+            516,
+            765,
+            903,
+            900
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "table",
+        "img_path": "images/0c5f99619aab40d1a9f6faa1475a3c4521cc2d3ae0ebe22950b184b8ab915735.jpg",
+        "table_caption": [
+            "Table 2. Ablation studies examining the components of GCoT with TabMWP dataset. w/o Augmentation means only generating single GCoT data for each sample and w/o Box Verification means only the final answer of generated CoT is verified. "
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Samples</td><td>GCoT</td><td>w/o Augmentation</td><td>w/o Box Verification</td></tr><tr><td>8</td><td>23.86±1.02</td><td>21.56±1.91 (-2.30)</td><td>17.92±4.88 (-5.94)</td></tr><tr><td>16</td><td>25.83±1.74</td><td>23.97±1.88 (-1.86)</td><td>19.43±2.35 (-6.40)</td></tr><tr><td>32</td><td>27.35±0.17</td><td>25.62±0.62 (-1.73)</td><td>20.96±1.56 (-6.39)</td></tr><tr><td>64</td><td>30.38±0.10</td><td>28.75±0.29 (-1.63)</td><td>21.11±1.38 (-9.27)</td></tr><tr><td>128</td><td>33.93±0.54</td><td>31.57±0.47 (-2.36)</td><td>23.57±2.21 (-10.36)</td></tr></table>",
+        "bbox": [
+            94,
+            88,
+            482,
+            180
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            93,
+            276,
+            480,
+            426
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "image",
+        "img_path": "images/431e7a7738b08fadb2b62d4ac9570bf9ceeadb4b4a2e7152c24d4236ff9daf74.jpg",
+        "image_caption": [
+            "Figure 4. Result of analyzing the impact of bootstrapping loop time. "
+        ],
+        "image_footnote": [],
+        "bbox": [
+            91,
+            440,
+            460,
+            655
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Bootstrapping Loop Time The results presented in Fig. 4 demonstrate the impact of increasing the bootstrapping loop time on the number of true bounding boxes generated. As the bootstrapping loop time increases, the number of true boxes steadily rises for all datasets. This indicates that the iterative process of generating and refining bounding boxes through multiple loops leads to more accurate and reliable outputs. Notably, datasets such as ChartQA and TabMWP show substantial improvements in true box generation, while TAT-QA and DVQA exhibit more gradual gains. This demonstrates the effectiveness of bootstrapping in enhancing the model’s ability to generate high-quality bounding boxes over successive iterations, providing an efficient method to obtain grounded information without the need for labeling. ",
+        "bbox": [
+            93,
+            734,
+            480,
+            900
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "table",
+        "img_path": "images/a8d86a139a2cfa4196e45a4206496bd10e900ce69e8e0f4bb92d04102e1746e2.jpg",
+        "table_caption": [
+            "Table 3. Ablation on distillation model choice. "
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Source</td><td>Distillation</td><td>GCoT</td></tr><tr><td>LLaMA3.2</td><td>24.14±0.72</td><td>27.35±0.17 (+3.21)</td></tr><tr><td>Claude3.5</td><td>19.84±0.49</td><td>25.46±0.49 (+5.62)</td></tr><tr><td>GPT-40</td><td>25.91±1.80</td><td>27.46±0.22 (+1.54)</td></tr><tr><td>Qwen2-VL</td><td>21.31±0.60</td><td>26.25±0.54 (+4.95)</td></tr><tr><td>Gemini1.5-Pro</td><td>22.70±1.14</td><td>26.20±0.95 (+3.50)</td></tr><tr><td> Average</td><td>22.78±2.37</td><td>26.54±0.91 (+3.76)</td></tr></table>",
+        "bbox": [
+            522,
+            88,
+            897,
+            228
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            281,
+            903,
+            342
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Distillation Choice Finally, we analyze the impact of using different models for distilling CoT. Tab. 3 shows the performance of GCoT when distilled using various language models, including LLaMA 3.2, Claude 3.5, GPT4o, Qwen2-VL, and Gemini $1 . 5 – \\mathrm { P r o }$ . The results indicate that GCoT consistently outperforms the normal distillation approach, achieving average improvements ranging from $+ 1 . 5 4$ to $+ 5 . 6 2$ percentage points across different models. The best results were observed when distilling from Claude 3.5 and Qwen2-VL, where GCoT improves by $+ 5 . 6 2$ and $+ 4 . 9 5$ percentage points, respectively. These results indicate that the GCoT is not restricted to any specific source model for distillation, allowing it to receive input from a variety of models without impacting its performance. ",
+        "bbox": [
+            516,
+            362,
+            903,
+            571
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "An example of different source distillation data is presented in Tab. 4. Overall, the distillation data provided by each model exhibits significantly different formats. This leads to very unstable training when directly applied to such an uncertain data format, as evidenced by the high variance of 2.37 in the average results from Tab. 3. In contrast, GCoT alleviates format differences through self-generated data, resulting in more stable training with a variance of only 0.91. At the same time, when delving into the details of each distillation data, each piece of data may have issues related to the thought process, answers, or formatting to varying degrees, which can be harmful to the model’s training. Thus, by addressing formatting and filtering errors, our GCoT can derive performance improvements from the distillation data of various sources. Examples of corresponding GCoT data for different sources can be found in the supplementary material. ",
+        "bbox": [
+            516,
+            574,
+            905,
+            829
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "5. Conclusion ",
+        "text_level": 1,
+        "bbox": [
+            516,
+            843,
+            630,
+            861
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "To the best of our knowledge, this study is the first to study MLLMs in data-limited settings for specialized vision tasks. ",
+        "bbox": [
+            516,
+            871,
+            903,
+            900
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Distillation Data Example ",
+        "text_level": 1,
+        "bbox": [
+            125,
+            93,
+            308,
+            108
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "table",
+        "img_path": "images/0a03ad9cac4bda932a07c34e5b6fc9171af016c915237af5009a2bd78f5e7dba.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td rowspan=1 colspan=2>Fan lettersreceived</td></tr><tr><td rowspan=1 colspan=1>Day</td><td rowspan=1 colspan=1>Numberoffan letters</td></tr><tr><td rowspan=1 colspan=1>Wednesday</td><td rowspan=1 colspan=1>204</td></tr><tr><td rowspan=1 colspan=1>Thursday</td><td rowspan=1 colspan=1>204</td></tr><tr><td rowspan=1 colspan=1>Friday</td><td rowspan=1 colspan=1>337</td></tr><tr><td rowspan=1 colspan=1>Saturday</td><td rowspan=1 colspan=1>463</td></tr><tr><td rowspan=1 colspan=1>Monday</td><td rowspan=1 colspan=1>271</td></tr></table>",
+        "bbox": [
+            129,
+            113,
+            292,
+            219
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Question: An actor was informed how many fan letters he received each day. How many fan letters total were received on Thursday and Monday? ",
+        "bbox": [
+            320,
+            127,
+            879,
+            151
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Prompt: Based on the following question: An actor was informed how many fan letters he received each day. How many fan letters total were received on Thursday and Monday? Your task is to give a explanation for the question. Give step by step reasoning to get the answer, and when you’re ready to answer, please use the format ’\\*Answer\\*:’ ",
+        "bbox": [
+            321,
+            152,
+            880,
+            199
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Answer: 475 ",
+        "bbox": [
+            323,
+            200,
+            395,
+            210
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "LLaMA Distillation Data ",
+        "text_level": 1,
+        "bbox": [
+            127,
+            231,
+            269,
+            242
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "To find the total number of fan letters received on Thursday and Monday, we need to add the number of fan letters received on each day.   \nStep 1: Identify the number of fan letters received on Thursday. According to the table, the actor received 204 fan letters on Thursday.   \nStep 2: Identify the number of fan letters received on Monday. According to the table, the actor received 274 fan letters on Monday.   \nStep 3: Add the number of fan letters received on Thursday and Monday. $-$   \n\\*Answer\\*: 475 ",
+        "bbox": [
+            122,
+            244,
+            838,
+            301
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Gemini Distillation Data ",
+        "text_level": 1,
+        "bbox": [
+            127,
+            313,
+            266,
+            324
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "1. $^ { * * }$ Identify the relevant data:\\*\\* The table shows how many fan letters an actor received each day and on Thursday and Monday.   \n2. $^ { * * }$ Extract the data:\\*\\* The table shows the number of fan letters received each day: 204.   \nThe table also shows the number of fan letters received on Thursday and Monday: 271.   \n3. $^ { * * }$ Add the values:\\*\\* The total number of fan letters received on Thursday and Monday is $2 7 1 + 2 0 4 = 4 7 5$ .   \n\\*Answer\\*: 475 ",
+        "bbox": [
+            124,
+            324,
+            807,
+            383
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Claude Distillation Data ",
+        "text_level": 1,
+        "bbox": [
+            127,
+            393,
+            264,
+            405
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Okay, let’s break this down step-by-step: ",
+        "bbox": [
+            129,
+            406,
+            343,
+            417
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "1. The question states that an actor was informed how many fan letters he received each day.   \n2. The provided table shows the number of fan letters received on each day of the week.   \n3. The question specifically asks for the total number of fan letters received on Thursday and Monday.   \n4. From the table, we can see that on Thursday, the actor received 214 fan letters.   \n5. On Monday, the actor received 271 fan letters.   \n6. To get the total number of fan letters received on Thursday and Monday, we add these two numbers together.   \n\\*Answer\\*: 475 fan letters were received on Thursday and Monday. ",
+        "bbox": [
+            127,
+            419,
+            709,
+            502
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Qwen Distillation Data ",
+        "text_level": 1,
+        "bbox": [
+            127,
+            511,
+            256,
+            522
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "To find the total number of fan letters received on Thursday and Monday, we need to add the number received on each of those days. From the table: ",
+        "bbox": [
+            122,
+            522,
+            821,
+            545
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "- Thursday: 204 fan letters   \n- Monday: 271 fan letters   \nNow, we add these two numbers together: 204 (Thursday) $+ 2 7 1$ (Monday) $= 4 7 5$ fan letters So, the total number of fan letters received on Thursday and Monday is 475. ",
+        "bbox": [
+            125,
+            546,
+            611,
+            594
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Table 4. Example of Distillation CoT data from different sources, showing variations in language patterns and errors in reasoning. ",
+        "bbox": [
+            114,
+            611,
+            875,
+            625
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Our research, conducted across five distinct datasets, reveals that training models solely with question-answer pairs fails to significantly enhance their generalization capabilities, particularly when only a limited number of labeled examples are available. Although integrating CoT reasoning into the training process results in some performance improvements, the presence of factual inaccuracies within the CoT constrains the model’s ability to learn broadly applicable knowledge. To overcome this limitation, we introduce GCoT, which essentially injects self-verified grounding information into the CoT. This approach enables the model to learn from higher-quality reasoning data, thereby capturing more generalizable patterns. As MLLMs continue to grow in size, efficient adaptation becomes essential for their democratization and large-scale deployment. We hope this work provides valuable insights and inspires future research to address these practical challenges in enhancing model generalization under constrained data conditions. ",
+        "bbox": [
+            93,
+            654,
+            482,
+            892
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            652,
+            905,
+            681
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "6. Limitations and Future Work ",
+        "text_level": 1,
+        "bbox": [
+            517,
+            693,
+            784,
+            710
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "In terms of limitations, our approach requires examining the CoT reasoning process based on the content within bounding boxes. For abstract objects like lines or icons, providing accurate bounding boxes and verifying their content is challenging. This restricts the method to image formats that are mainly rich in text and numbers, such as those used in chart analysis. Meanwhile, our model relies on existing external models to provide corresponding CoT data for bootstrapping, which greatly limits the training of the method and makes it difficult to scale up. In future work, we can try to leverage reinforcement learning approaches [31] to enhance the model’s CoT ability and further inject grounding ability. ",
+        "bbox": [
+            516,
+            719,
+            905,
+            900
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "7. Acknowledgments ",
+        "text_level": 1,
+        "bbox": [
+            94,
+            89,
+            267,
+            106
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "This project was in part supported by Hong Kong Research Grants Council Early Career Scheme (No. 22200824), and National Natural Science Foundation of China (Grant No. 62306090). ",
+        "bbox": [
+            93,
+            116,
+            482,
+            175
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "References ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            193,
+            186,
+            208
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "[1] Gongwei Chen, Leyang Shen, Rui Shao, Xiang Deng, and Liqiang Nie. Lion: Empowering multimodal large language model with dual-level visual knowledge. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 26540–26550, 2024. 2   \n[2] Jun Chen, Deyao Zhu, Xiaoqian Shen, Xiang Li, Zechun Liu, Pengchuan Zhang, Raghuraman Krishnamoorthi, Vikas Chandra, Yunyang Xiong, and Mohamed Elhoseiny. Minigpt-v2: large language model as a unified interface for vision-language multi-task learning. arXiv preprint arXiv:2310.09478, 2023. 2   \n[3] Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168, 2021. 3   \n[4] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. arXiv preprint arXiv:2407.21783, 2024. 3, 5   \n[5] Yucheng Han, Chi Zhang, Xin Chen, Xu Yang, Zhibin Wang, Gang Yu, Bin Fu, and Hanwang Zhang. Chartllama: A multimodal llm for chart understanding and generation. arXiv preprint arXiv:2311.16483, 2023. 2, 3   \n[6] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan AllenZhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. International Conference on Learning Representations, 2021. 5   \n[7] Zheng Huang, Kai Chen, Jianhua He, Xiang Bai, Dimosthenis Karatzas, Shijian Lu, and CV Jawahar. Icdar2019 competition on scanned receipt ocr and information extraction. In 2019 International Conference on Document Analysis and Recognition (ICDAR), pages 1516–1520. IEEE, 2019. 5   \n[8] Kushal Kafle, Brian Price, Scott Cohen, and Christopher Kanan. Dvqa: Understanding data visualizations via question answering. In Proceedings of the IEEE conference on computer vision and pattern recognition, pages 5648–5656, 2018. 5   \n[9] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language models are zero-shot reasoners. Advances in neural information processing systems, 35:22199–22213, 2022. 3   \n[10] Ranjay Krishna, Yuke Zhu, Oliver Groth, Justin Johnson, Kenji Hata, Joshua Kravitz, Stephanie Chen, Yannis Kalantidis, Li-Jia Li, David A Shamma, et al. Visual genome: Connecting language and vision using crowdsourced dense image annotations. International journal of computer vision, 123:32–73, 2017. 2   \n[11] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In International conference on machine learning, pages 19730– 19742. PMLR, 2023. 2   \n[12] Zhan Ling, Yunhao Fang, Xuanlin Li, Zhiao Huang, Mingu Lee, Roland Memisevic, and Hao Su. Deductive verification of chain-of-thought reasoning. Advances in Neural Information Processing Systems, 36, 2024. 3   \n[13] Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 26296–26306, 2024. 2, 4   \n[14] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural information processing systems, 36, 2024. 2   \n[15] Edward Loper and Steven Bird. Nltk: The natural language toolkit. In Proceedings of the ACL-02 Workshop on Effective Tools and Methodologies for Teaching Natural Language Processing and Computational Linguistics, pages 63– 70, 2002. 4   \n[16] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. 5   \n[17] Pan Lu, Liang Qiu, Kai-Wei Chang, Ying Nian Wu, SongChun Zhu, Tanmay Rajpurohit, Peter Clark, and Ashwin Kalyan. Dynamic prompt learning via policy gradient for semi-structured mathematical reasoning. The Eleventh International Conference on Learning Representations, 2022. 5   \n[18] Ahmed Masry, Xuan Long Do, Jia Qing Tan, Shafiq Joty, and Enamul Hoque. Chartqa: A benchmark for question answering about charts with visual and logical reasoning. In Findings of the Association for Computational Linguistics: ACL 2022, pages 2263–2279, 2022. 5   \n[19] Ahmed Masry, Megh Thakkar, Aayush Bajaj, Aaryaman Kartha, Enamul Hoque, and Shafiq Joty. Chartgemma: Visual instruction-tuning for chart reasoning in the wild. arXiv preprint arXiv:2407.04172, 2024. 3   \n[20] Fanqing Meng, Wenqi Shao, Quanfeng Lu, Peng Gao, Kaipeng Zhang, Yu Qiao, and Ping Luo. Chartassisstant: A universal chart multimodal language model via chart-to-table pre-training and multitask instruction tuning. arXiv preprint arXiv:2401.02384, 2024. 2, 3   \n[21] Ning Miao, Yee Whye Teh, and Tom Rainforth. Selfcheck: Using llms to zero-shot check their own step-by-step reasoning. The Twelfth International Conference on Learning Representations, 2023. 3   \n[22] Vicente Ordonez, Girish Kulkarni, and Tamara Berg. Im2text: Describing images using 1 million captioned photographs. Advances in neural information processing systems, 24, 2011. 2   \n[23] Bryan A Plummer, Liwei Wang, Chris M Cervantes, Juan C Caicedo, Julia Hockenmaier, and Svetlana Lazebnik. Flickr30k entities: Collecting region-to-phrase correspondences for richer image-to-sentence models. In Proceedings of the IEEE international conference on computer vision, pages 2641–2649, 2015. 4 [24] Leonardo Ranaldi and Andre Freitas. Aligning large and small language models via chain-of-thought reasoning. In Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics (Volume   \n1: Long Papers), pages 1812–1827, 2024. 3 [25] Christoph Schuhmann, Robert Kaczmarczyk, Aran Komatsuzaki, Aarush Katta, Richard Vencu, Romain Beaumont, Jenia Jitsev, Theo Coombes, and Clayton Mullis. Laion- $. 4 0 0 \\mathrm { m }$ : Open dataset of clip-filtered 400 million image-text pairs. In NeurIPS Workshop Datacentric AI. Julich Supercomputing ¨ Center, 2021. 2 [26] Hao Shao, Shengju Qian, Han Xiao, Guanglu Song, Zhuofan Zong, Letian Wang, Yu Liu, and Hongsheng Li. Visual cot: Unleashing chain-of-thought reasoning in multi-modal language models. arXiv e-prints, pages arXiv–2403, 2024.   \n4, 5 [27] Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. Conceptual captions: A cleaned, hypernymed, image alt-text dataset for automatic image captioning. In Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages   \n2556–2565, 2018. 2 [28] Leyang Shen, Gongwei Chen, Rui Shao, Weili Guan, and Liqiang Nie. Mome: Mixture of multimodal experts for generalist multimodal large language models. In Advances in Neural Information Processing Systems, pages 42048–   \n42070, 2024. 2 [29] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems, 35:24824–24837, 2022. 2, 3 [30] Qiong Wu, Xiangcong Yang, Yiyi Zhou, Chenxin Fang, Baiyang Song, Xiaoshuai Sun, and Rongrong Ji. Grounded chain-of-thought for multimodal large language models. arXiv preprint arXiv:2503.12799, 2025. 2 [31] Jiaer Xia, Yuhang Zang, Peng Gao, Yixuan Li, and Kaiyang Zhou. Visionary-r1: Mitigating shortcuts in visual reasoning with reinforcement learning. arXiv preprint arXiv:2505.14677, 2025. 8 [32] Renshan Zhang, Rui Shao, Gongwei Chen, Miao Zhang, Kaiwen Zhou, Weili Guan, and Liqiang Nie. Falcon: Resolving visual redundancy and fragmentation in high-resolution multimodal large language models via visual registers. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), 2025. 2 [33] Fengbin Zhu, Wenqiang Lei, Youcheng Huang, Chao Wang, Shuo Zhang, Jiancheng Lv, Fuli Feng, and Tat-Seng Chua. Tat-qa: A question answering benchmark on a hybrid of tabular and textual content in finance. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers), pages   \n3277–3287, 2021. 5 [34] Yuke Zhu, Oliver Groth, Michael Bernstein, and Li Fei-Fei. Visual7w: Grounded question answering in images. In Pro",
+        "bbox": [
+            99,
+            218,
+            480,
+            896
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            516,
+            74,
+            905,
+            895
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "",
+        "bbox": [
+            91,
+            61,
+            482,
+            901
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "discarded",
+        "text": "ceedings of the IEEE conference on computer vision and pattern recognition, pages 4995–5004, 2016. 4 ",
+        "bbox": [
+            549,
+            93,
+            903,
+            119
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "text",
+        "text": "A. Appendix ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            89,
+            200,
+            107
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "A.1. Evaluation of Generalization Ability ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            114,
+            408,
+            130
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "Theoretically, our approach can stem the generalizability from clearer and better alignment training data. Compared to the original data, which only includes simple answer annotations, CoT data provides the detailed underlying structures, relationships, and logical patterns within the data. This enables clearer alignment and understanding, rather than merely remembering the simple answer, thereby capturing more generalizable patterns. Additionally, the proposed GCoT provides higher-quality reasoning data by eliminating the noisy information that may exist in the distilled CoT data. To better demonstrate generalizability, we conducted a cross-model evaluation, as shown in Tab. 5. The results indicate that the model trained on ChartQA is capable of generalizing improvements to other datasets. Notably, our proposed GCoT method shows even greater enhancements. ",
+        "bbox": [
+            93,
+            136,
+            482,
+            377
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "table",
+        "img_path": "images/fecbd137b5ff2abe13a4fd3f1d8d4ba894b34ff51a8db480437ddb88157d076a.jpg",
+        "table_caption": [
+            "Table 5. The model is trained on 128 ChartQA datasets and demonstrates strong generalization capabilities across different datasets with proposed GCoT method. "
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Method</td><td>ChartQA</td><td>TabMWP</td><td>DVQA</td></tr><tr><td>Zero-shot</td><td>10.12</td><td>19.60</td><td>13.95</td></tr><tr><td>CoT</td><td>20.44</td><td>21.01</td><td>12.34</td></tr><tr><td>GCoT</td><td>25.18</td><td>25.55</td><td>15.73</td></tr></table>",
+        "bbox": [
+            138,
+            441,
+            436,
+            520
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "various sources of distillation data and different datasets, highlighting the improvements brought about by GCoT. ",
+        "bbox": [
+            516,
+            92,
+            903,
+            121
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "A.3.1. Different source of Distillation CoT ",
+        "text_level": 1,
+        "bbox": [
+            517,
+            128,
+            805,
+            143
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "In the main paper, we have shown some examples to compare distillation CoT data from different sources and analyze why their performance varies significantly under training. Additionally, we will contrast these with our selfgenerated GCoT data, with the results illustrated in Fig. 5. In contrast to the distillation CoT, the GCoT markedly reduces inaccuracies in the reasoning process, resulting in higher-quality training data. ",
+        "bbox": [
+            516,
+            148,
+            903,
+            268
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "A.3.2. Chart Understanding Task Case ",
+        "text_level": 1,
+        "bbox": [
+            517,
+            276,
+            785,
+            290
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "Figs. 6–8 illustrate GCoT’s adaptability across different datasets in the context of chart understanding tasks. Firstly, in comparison to the distillation data, GCoT significantly reduces inaccuracies and standardizes the format. Furthermore, GCoT is capable of generating a diverse range of CoT data while maintaining high accuracy. These examples highlight GCoT’s ability to produce reliable and varied datasets through self-generation. This capability not only expands the originally limited datasets but also enhances training efficiency, leading to improved performance across diverse tasks. ",
+        "bbox": [
+            516,
+            295,
+            905,
+            460
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "A.2. Evaluation of Chain-of-Thought Accuracy ",
+        "text_level": 1,
+        "bbox": [
+            94,
+            539,
+            454,
+            556
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "To address the scarcity of detailed annotations for intermediate reasoning steps and to more intuitively validate our process verification approach, we manually examined 64 ChartQA CoT samples, as shown in Table 6. The results support the findings from our ablation study: although the distilled CoT contains certain errors, incorporating box verification substantially reduces these mistakes, resulting in more accurate training data. Moreover, if process verification is omitted and only the final answers are checked, the self-augmented data exhibit a higher error rate. In contrast, GCoT effectively alleviates this issue, yielding significantly more reliable training data. ",
+        "bbox": [
+            93,
+            561,
+            482,
+            742
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "table",
+        "img_path": "images/67278694649fe6d0da20003e27408529f29737bd31493fbf38481645fd0177a2.jpg",
+        "table_caption": [
+            "Table 6. Box-based Verification can effectively eliminate errors and provide more accurate training samples. "
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td></td><td>CoT</td><td>GCoT</td><td>w/o Box</td><td>GCoT+Aug</td></tr><tr><td>Acc/All</td><td>49/64</td><td>57/64</td><td>33/64</td><td>162/192</td></tr></table>",
+        "bbox": [
+            104,
+            792,
+            470,
+            828
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "A.3. Visualization ",
+        "text_level": 1,
+        "bbox": [
+            93,
+            848,
+            230,
+            863
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "This section presents illustrative examples to clarify the details of GCoT. We demonstrate the self-verified GCoT with ",
+        "bbox": [
+            93,
+            871,
+            482,
+            900
+        ],
+        "page_idx": 10
+    },
+    {
+        "type": "text",
+        "text": "TabMWP ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            178,
+            281,
+            194
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "Question: An actor was informed how many fan letters he received each day. How many fan letters total were received on Thursday and Monday? ",
+        "bbox": [
+            454,
+            204,
+            794,
+            243
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "table",
+        "img_path": "images/4510dd38386cd8cf2d6dac4a8d5213abe6e3a3c2226268a7fbaf760718370bb6.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td rowspan=1 colspan=2>Fan letters received</td></tr><tr><td rowspan=1 colspan=1>Day</td><td rowspan=1 colspan=1>Number of fan letters</td></tr><tr><td rowspan=1 colspan=1>Wednesday</td><td rowspan=1 colspan=1>204</td></tr><tr><td rowspan=1 colspan=1>Thursday</td><td rowspan=1 colspan=1>204</td></tr><tr><td rowspan=1 colspan=1>Friday</td><td rowspan=1 colspan=1>337</td></tr><tr><td rowspan=1 colspan=1>Saturday</td><td rowspan=1 colspan=1>463</td></tr><tr><td rowspan=1 colspan=1>Monday</td><td rowspan=1 colspan=1>271</td></tr></table>",
+        "bbox": [
+            202,
+            199,
+            442,
+            352
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "Answer: 475 ",
+        "bbox": [
+            455,
+            244,
+            532,
+            256
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "Prompt: Based on the following question: An actor was informed how many fan letters he received each day. How many fan letters total were received on Thursday and Monday? Your task is to give a explanation for the question. Give step by step reasoning to get the answer, and when you're ready to answer, please use the format '\\*Answer\\*:' ",
+        "bbox": [
+            454,
+            267,
+            812,
+            345
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "GCoT (LLaMA) ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            377,
+            339,
+            395
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "To determine the total number of fan letters received by the actor on Thursday and Monday, we can take the sum of those two days' fan letter counts. The fan letter count on Thursday [0.000, 0.450, 0.200, 0.515] was 204. The fan letter count on Monday [0.019, 0.819, 0.275, 0.895] was 271 [0.619, 0.819, 0.719, 0.865]. Thus, the total number of fan letters received on Thursday and Monday is: $2 0 4 + 2 7 1 = 4 7 5$ . \\*Answer\\*: 475. ",
+        "bbox": [
+            192,
+            401,
+            808,
+            467
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "GCoT (Claude) ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            484,
+            330,
+            502
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "1. First, let's understand the problem: The actor was told how many fan letters he received.   \n2. Potential fan letters: - The number of fan letters [0.411, 0.195, 0.998, 0.271] could be 204 received on Thursday [0.000, 0.455, 0.281, 0.531] - 271 received on Monday [0.000, 0.715, 0.255, 0.871].   \n3. Total fan letters calculation: - $2 0 4 + 2 7 1 = 4 7 5$   \n\\*Answer\\*: 475 ",
+        "bbox": [
+            189,
+            506,
+            812,
+            569
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "GCoT (Gemini) ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            593,
+            333,
+            611
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "We need to find the total number of fan letters received on Thursday and Monday. The table shows the number of fan letters for each day. The actor received 204 fan letters on Thursday [0.095, 0.455, 0.250, 0.515] and 271 [0.619, 0.795, 0.750, 0.855] on Monday. Calculate the total number of fan letters: $^ { * * } 2 0 4 + 2 7 1 = 4 7 5$ \\*Answer\\*: 475 ",
+        "bbox": [
+            192,
+            614,
+            812,
+            665
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "GCoT (Qwen) ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            695,
+            318,
+            713
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "To determine the total number of fan letters received by the actor on Thursday [0.000, 0.455, 0.200, 0.519] and Monday, we can take the sum of those two days' fan letter counts. The fan letter count on Thursday was 204. The fan letter count on Monday was 271 [0.617, 0.793, 0.751, 0.859]. Thus, the total number of fan letters received on Thursday and Monday is: $2 0 4 + 2 7 1 = 4 7 5$ .   \n\\*Answer\\*: 475. ",
+        "bbox": [
+            192,
+            714,
+            810,
+            779
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "Figure 5. Self-generated GCoT data eliminating external language discrepancies and aligning closely with the model’s linguistic tendencies. ",
+        "bbox": [
+            96,
+            801,
+            901,
+            816
+        ],
+        "page_idx": 11
+    },
+    {
+        "type": "text",
+        "text": "ChartQA ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            122,
+            279,
+            140
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "image",
+        "img_path": "images/79e782c74f0cf6924e86958075ddedb96a282d2fead95a7c43f114557a132c80.jpg",
+        "image_caption": [
+            ""
+        ],
+        "image_footnote": [],
+        "bbox": [
+            222,
+            148,
+            573,
+            313
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Question: Is the sum of Canada and Botswana more then Russia? Answer: No ",
+        "bbox": [
+            598,
+            165,
+            787,
+            204
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "LLaMA ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            364,
+            266,
+            380
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "To determine if the sum of Canada and Botswana is more than Russia, we need to calculate the total percentage of Canada and Botswana and compare it with Russia's percentage. ",
+        "bbox": [
+            186,
+            380,
+            802,
+            402
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Step 1: Calculate the sum of Canada and Botswana's percentages. - Canada $\\begin{array} { r l } { = } & { { } } \\end{array}$ - Botswana $= 1 7 . 7 \\%$ Sum of Canada and Botswana $= + 1 7 . 7 \\%$ ",
+        "bbox": [
+            194,
+            404,
+            526,
+            449
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Step 2: Compare the sum of Canada and Botswana with Russia's percentage. Russia $= 3 2 . 8 \\%$ ",
+        "bbox": [
+            191,
+            450,
+            581,
+            472
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Step 3: Determine if the sum of Canada and Botswana is more than Russia. ",
+        "bbox": [
+            196,
+            474,
+            576,
+            484
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            527,
+            248,
+            544
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "To answer this question, we need to look at the provided pie chart and identify the values for each country. The chart shows that the sum of Canada [0.211, 0.701, 0.351, 0.715] and Botswana [0.651, 0.699, 0.791, 0.715] is $3 1 . 2 \\%$ , while Russia has a value of $3 2 . 8 \\%$ . Comparing these values, we can see that the sum of Canada [0.211, 0.701, 0.351, 0.715] and Botswana $( 3 1 . 2 \\% )$ is less than Russia $( 3 2 . 8 \\% )$ . \\*Answer\\*: No. ",
+        "bbox": [
+            192,
+            547,
+            810,
+            594
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            191,
+            613,
+            245,
+            627
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "To answer this question, we need to add the values of Canada [0.211, 0.701, 0.351, 0.715] and Botswana together and   \nthen compare it to the value of Russia. The values are: Canada $[ 0 . 2 1 1 , 0 . 7 0 1 , 0 . 3 5 1 , 0 . 7 1 5 ] = 1 3 . 5$ Botswana $[ 0 . 6 5 1 , 0 . 7 0 1 , 0 . 7 9 1 , 0 . 7 1 5 ] = 1 7 . 7$ Total $= 1 3 . 5 + 1 7 . 7 = 3 1 . 2$ Russia $= 3 2 . 8$   \nSince the sum (31.2) is less than the value of Russia (32.8), the answer is no.   \n\\*Answer\\*: No. ",
+        "bbox": [
+            191,
+            630,
+            810,
+            724
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            742,
+            248,
+            757
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "To determine whether the sum of Canada [0.211, 0.701, 0.331, 0.715] and Botswana is more than Russia, we need to add these values together. Canada [0.211, 0.701, 0.331, 0.715] has a value of 13.5 [0.263, 0.699, 0.334, 0.715]. Botswana has a value of 17.7 [0.731, 0.688, 0.798, 0.723]. When we add these values together, we get: $1 3 . 5 + 1 7 . 7 =$ 31.8. Now, let‘s compare this value to Russia’s value: Russia has a value of 32.8 [0.791, 0.338, 0.868, 0.373]. When we compare the values, we can see that Russia‘s value is larger than the sum of Canada [0.211, 0.701, 0.331, 0.715] and Botswana. \\*Answer\\*: No. ",
+        "bbox": [
+            194,
+            761,
+            812,
+            832
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "Figure 6. Example of GCoT applied to ChartQA dataset, illustrating its ability to generate reliable and diverse training CoT data. ",
+        "bbox": [
+            119,
+            856,
+            874,
+            871
+        ],
+        "page_idx": 12
+    },
+    {
+        "type": "text",
+        "text": "TAT-QA ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            166,
+            271,
+            184
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "table",
+        "img_path": "images/2986da0e51b47672f764b2d3b7056351f3f7d51b7b136cb43254ba1ac19e97b9.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td rowspan=\"2\">(In thousands)</td><td colspan=\"3\">Year Ended December 31,</td></tr><tr><td></td><td>2019</td><td>2018</td></tr><tr><td>Opening balance</td><td>$</td><td>13,783</td><td>$ 8,469</td></tr><tr><td>Additions</td><td></td><td>157,121</td><td>6,215</td></tr><tr><td>Acquisition adjustments</td><td></td><td></td><td>(901)</td></tr><tr><td> Effect of currency translation adjustment</td><td></td><td>305</td><td></td></tr><tr><td>Goodwill</td><td>$</td><td>171,209 $</td><td>13,783</td></tr></table>",
+        "bbox": [
+            202,
+            189,
+            799,
+            295
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Question: From 2018 to 2019, how many years was the Opening balance more than $\\$ 5,000$ thousand? Answer: 2 ",
+        "bbox": [
+            209,
+            304,
+            787,
+            329
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "LLaMA ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            354,
+            266,
+            369
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "To determine the number of years the Opening balance was more than $\\$ 5,000$ thousand from 2018 to 2019, we need to compare the Opening balance for each year with \\$5,000 thousand. ",
+        "bbox": [
+            194,
+            372,
+            807,
+            395
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "In 2018, the Opening balance was \\$8,469 thousand. Since $\\$ 8,469$ is greater than \\$5,000, the Opening balance was more than \\$5,000 thousand in 2018. ",
+        "bbox": [
+            194,
+            396,
+            805,
+            417
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "In 2019, the Opening balance was $\\$ 13,783$ thousand. Since \\$13,783 is also greater than \\$5,000, the Opening balance was more than $\\$ 5,000$ thousand in 2019 as well. ",
+        "bbox": [
+            192,
+            419,
+            808,
+            443
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Therefore, the Opening balance was more than \\$5,000 thousand for both years from 2018 to 2019. ",
+        "bbox": [
+            205,
+            443,
+            705,
+            454
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            482,
+            251,
+            497
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "To determine the number of years the Opening balance [0.021, 0.421, 0.111, 0.439] was more than $\\$ 5,000$ thousand from 2018 [0.821, 0.385, 0.911, 0.397] to 2019 [0.642, 0.385, 0.722, 0.397], we need to examine the Opening balances for these two years. In 2018, the Opening balance is \\$8,469 thousand. Since this value is greater than \\$5,000 thousand, the Opening balance was more than $\\$ 5,000$ thousand in 2018. In 2019, the Opening balance is $\\$ 13,783$ thousand. Since this value is also greater than $\\$ 5,000$ thousand, the Opening balance was more than $\\$ 5,000$ thousand in 2019 as well. Therefore, the Opening balance was more than $\\$ 5,000$ thousand in both 2018 and 2019, indicating that it was more than \\$5,000 thousand for two consecutive years from 2018 to 2019. \\*Answer\\*: 2. ",
+        "bbox": [
+            196,
+            501,
+            815,
+            584
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            601,
+            250,
+            614
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "To find out the number of years from 2018 to 2019 [0.621, 0.379, 0.717, 0.391] with the Opening balance more than $\\$ 5,000$ thousand, we need to look at the table provided and find the row that corresponds to the Opening balance. The column that corresponds to the Opening balance is the first column labeled as \\\"Opening Balance.\\\" We then look at the the first column to see the value of the Opening balance for 2018 and 2019. In 2018, the Opening balance is $\\$ 8,469$ thousand. In 2019, the Opening balance is $\\$ 13,783$ thousand. The Opening balance is more than $\\$ 5,000$ thousand in both years.\\*Answer\\*: 2. ",
+        "bbox": [
+            194,
+            616,
+            813,
+            688
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            194,
+            719,
+            250,
+            736
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "To find the number of years the Opening balance was more than $\\$ 5,000$ thousand from 2018 to 2019, we need to look at the Opening balance over those two years. Opening Balance $2 0 1 8 = \\mathbb { S } 8 \\lrcorner 4 6 9$ [0.833, 0.399, 0.923, 0.422] thousand, Opening Balance $2 0 1 9 = \\mathbb { S } 1 3 , 7 8 3$ thousand. Since the Opening balance was more than $\\$ 5,000$ thousand in both 2018 and 2019, the answer is 2. \\*Answer\\*: 2. ",
+        "bbox": [
+            196,
+            739,
+            815,
+            786
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "Figure 7. Example of GCoT applied to TAT-QA dataset, illustrating its ability to generate reliable and diverse training CoT data. ",
+        "bbox": [
+            119,
+            813,
+            874,
+            828
+        ],
+        "page_idx": 13
+    },
+    {
+        "type": "text",
+        "text": "SROIE ",
+        "text_level": 1,
+        "bbox": [
+            192,
+            148,
+            259,
+            166
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "image",
+        "img_path": "images/c1ec13c6d9680fa94791bf30a3e40223d003b0d3021f4f6514cfe2fc468cd2d6.jpg",
+        "image_caption": [],
+        "image_footnote": [],
+        "bbox": [
+            349,
+            152,
+            625,
+            500
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "Question: What is the total amount in the invoice shown in the picture? ",
+        "bbox": [
+            642,
+            417,
+            805,
+            455
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "Answer: 6.00 ",
+        "bbox": [
+            643,
+            458,
+            723,
+            469
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "LLaMA ",
+        "text_level": 1,
+        "bbox": [
+            191,
+            530,
+            264,
+            545
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "To find the total amount in the invoice, we need to look at the \"SUB TOTAL\" and \"GRAND TOTAL\" sections. The \"SUB TOTAL\" is 6.00, and the \"GRAND TOTAL\" is also 6.00. This means that there are no additional charges or taxes added to the subtotal, so the grand total remains the same as the subtotal. \\*Answer\\*: 6.00. ",
+        "bbox": [
+            189,
+            546,
+            807,
+            583
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            191,
+            608,
+            245,
+            622
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "The invoice shows the total [0.271, 0.541, 0.325, 0.555] amount as 6.00. \\*Answer\\*: 6.00. ",
+        "bbox": [
+            189,
+            626,
+            648,
+            638
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            191,
+            666,
+            245,
+            681
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "To determine the total amount in the invoice, we need to look at the bottom of the receipt. The total amount is listed as 6.00 [0.671, 0.542, 0.725, 0.561]. \\*Answer\\*: 6.00. ",
+        "bbox": [
+            186,
+            683,
+            810,
+            707
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "GCoT ",
+        "text_level": 1,
+        "bbox": [
+            191,
+            744,
+            245,
+            761
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "To find the total amount in the invoice, we need to look at the bottom of the receipt. The total amount [0.274, 0.539, 0.325, 0.553] is listed as 6.00 [0.671, 0.542, 0.725, 0.561]. This means that the total amount due for the transaction is 6.00. \\*Answer\\*: 6.00. ",
+        "bbox": [
+            189,
+            765,
+            810,
+            801
+        ],
+        "page_idx": 14
+    },
+    {
+        "type": "text",
+        "text": "Figure 8. Example of GCoT applied to SROIE dataset, illustrating its ability to generate reliable and diverse training CoT data. ",
+        "bbox": [
+            125,
+            829,
+            872,
+            844
+        ],
+        "page_idx": 14
+    }
+]
