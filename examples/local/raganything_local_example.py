@@ -28,7 +28,25 @@ from raganything import RAGAnything, RAGAnythingConfig
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=".env", override=False)
-MODEL_NAME = "ep-20251124134322-8h8rn"
+
+def build_embedding_func(embed_model) -> EmbeddingFunc:
+    model = SentenceTransformer(embed_model, device="cuda:5")
+    dim = model.get_sentence_embedding_dimension()
+
+    async def encode(texts):
+        loop = asyncio.get_running_loop()
+
+        def _encode_sync():
+            vectors = model.encode(
+                texts, convert_to_numpy=True, show_progress_bar=False
+            )
+            return vectors.tolist()
+
+        return await loop.run_in_executor(None, _encode_sync)
+
+    return EmbeddingFunc(embedding_dim=dim, max_token_size=8192, func=encode)
+
+
 
 def configure_logging():
     """Configure logging for the application"""
@@ -85,10 +103,11 @@ def configure_logging():
 async def process_with_rag(
     file_path: str,
     output_dir: str,
-    api_key: str,
     base_url: str = None,
     working_dir: str = None,
     parser: str = None,
+    model_name: str = None,
+    embedding_func: SentenceTransformer = None,
 ):
     """
     Process document with RAGAnything
@@ -113,11 +132,11 @@ async def process_with_rag(
         # Define LLM model function
         def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
             return openai_complete_if_cache(
-                MODEL_NAME,
+                model_name,
                 prompt,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
-                api_key=api_key,
+                api_key="FAKE",
                 base_url=base_url,
                 **kwargs,
             )
@@ -134,8 +153,8 @@ async def process_with_rag(
             # If messages format is provided (for multimodal VLM enhanced query), use it directly
             if messages:
                 return openai_complete_if_cache(
-                    MODEL_NAME,
-                    "d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
+                    model_name,
+                    "FAKE",
                     system_prompt=None,
                     history_messages=[],
                     messages=messages,
@@ -146,8 +165,8 @@ async def process_with_rag(
             # Traditional single image format
             elif image_data:
                 return openai_complete_if_cache(
-                    MODEL_NAME,
-                    "d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
+                    model_name,
+                    "FAKE",
                     system_prompt=None,
                     history_messages=[],
                     messages=[
@@ -173,26 +192,10 @@ async def process_with_rag(
                     base_url=base_url,
                     **kwargs,
                 )
-            # Pure text format
             else:
                 return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
 
-        # Define embedding function - using environment variables for configuration
-        embedding_dim = int(os.getenv("EMBEDDING_DIM", "2048"))
-        embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-        
-        embedding_func = EmbeddingFunc(
-            embedding_dim=embedding_dim,
-            max_token_size=8192,
-            func=lambda texts: openai_embed(
-                texts,
-                model="ep-20251216001936-l62nr",
-                api_key="d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
-                base_url="https://ark.cn-beijing.volces.com/api/v3",
-            ),
-        )
 
-        # Initialize RAGAnything with new dataclass structure
         rag = RAGAnything(
             config=config,
             llm_model_func=llm_model_func,
@@ -206,10 +209,8 @@ async def process_with_rag(
             file_path=file_path, output_dir=output_dir, parse_method="auto"
         )
         rag.finalize_storages()
-        # Example queries - demonstrating different query approaches
         logger.info("\nQuerying processed document:")
 
-        # 1. Pure text queries using aquery()
         text_queries = [
             "What is the main content of the document?",
             "What are the key topics discussed?",
@@ -267,19 +268,14 @@ def main():
     parser = argparse.ArgumentParser(description="MinerU RAG Example")
     parser.add_argument("--file_path",default = "/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/pdfs/aps.65.128504.pdf", help="Path to the document to process")
     parser.add_argument(
-        "--working_dir", "-w", default="./rag_storage", help="Working directory path"
+        "--working_dir", "-w", default="./rag_storage/local", help="Working directory path"
     )
     parser.add_argument(
-        "--output", "-o", default="./output", help="Output directory path"
-    )
-    parser.add_argument(
-        "--api-key",
-        default="d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
-        help="OpenAI API key (defaults to LLM_BINDING_API_KEY env var)",
+        "--output", "-o", default="./output/local", help="Output directory path"
     )
     parser.add_argument(
         "--base-url",
-        default="https://ark.cn-beijing.volces.com/api/v3",
+        default="http://0.0.0.0:8000/v1",
         help="Optional base URL for API",
     )
     parser.add_argument(
@@ -287,28 +283,30 @@ def main():
         default=os.getenv("PARSER", "mineru"),
         help="Optional base URL for API",
     )
+    parser.add_argument(
+        "--model_name",
+        default="/mnt/storage/models/Qwen3/Qwen3_VL-thinking",
+        help="Model name",
+    )
 
     args = parser.parse_args()
 
-    # Check if API key is provided
-    # if not args.api_key:
-    #     logger.error("Error: OpenAI API key is required")
-    #     logger.error("Set api key environment variable or use --api-key option")
-    #     return
-
-    # Create output directory if specified
     if args.output:
         os.makedirs(args.output, exist_ok=True)
 
-    # Process with RAG
+    EMEDDING_MODEL="/mnt/storage/models/qwen3em8b"
+    EMBED_FUNC = build_embedding_func(EMEDDING_MODEL)
+    logger.info(f"Embedding model: {embedding_model}")
+
     asyncio.run(
         process_with_rag(
             args.file_path,
             args.output,
-            args.api_key,
             args.base_url,
             args.working_dir,
             args.parser,
+            args.model_name,
+            EMBED_FUNC
         )
     )
 

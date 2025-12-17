@@ -252,6 +252,10 @@ class QueryMixin:
         self.logger.info(
             f"Generated enhanced query length: {len(enhanced_query)} characters"
         )
+        print("....."*50)
+        self.logger.info(
+            f"enhanced_query"
+        )
 
         # Execute enhanced query
         result = await self.aquery(enhanced_query, mode=mode, **kwargs)

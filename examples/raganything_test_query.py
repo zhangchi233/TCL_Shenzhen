@@ -28,7 +28,7 @@ from raganything import RAGAnything, RAGAnythingConfig
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=".env", override=False)
-MODEL_NAME = "/mnt/storage/models/Qwen3/Qwen3-VL-thinking"
+MODEL_NAME = "ep-20251124134322-8h8rn"
 
 def configure_logging():
     """Configure logging for the application"""
@@ -140,7 +140,7 @@ async def process_with_rag(
             if messages:
                 return openai_complete_if_cache(
                     MODEL_NAME,
-                    "",
+                    api_key,
                     system_prompt=None,
                     history_messages=[],
                     messages=messages,
@@ -152,7 +152,7 @@ async def process_with_rag(
             elif image_data:
                 return openai_complete_if_cache(
                     MODEL_NAME,
-                    "",
+                    api_key,
                     system_prompt=None,
                     history_messages=[],
                     messages=[
@@ -184,7 +184,7 @@ async def process_with_rag(
                 return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
 
         # Define embedding function - using environment variables for configuration
-        embedding_dim = int(os.getenv("EMBEDDING_DIM", "4096"))
+        embedding_dim = int(os.getenv("EMBEDDING_DIM", "2048"))
         embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
         
         embedding_func = EmbeddingFunc(
@@ -192,9 +192,9 @@ async def process_with_rag(
             max_token_size=8192,
             func=lambda texts: openai_embed(
                 texts,
-                model="/mnt/storage/models/Qwen3/Qwen3-Embedding-8B",
-                api_key="asdf",
-                base_url="http://localhost:8000/v1/",
+                model="ep-20251216001936-l62nr",
+                api_key=api_key,
+                base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
         )
 
@@ -206,59 +206,65 @@ async def process_with_rag(
             embedding_func=embedding_func,
         )
 
-        # Process document
-        await rag.process_document_complete(
-            file_path=file_path, output_dir=output_dir, parse_method="auto"
-        )
-        rag.finalize_storages()
-        # Example queries - demonstrating different query approaches
-        logger.info("\nQuerying processed document:")
 
-        # 1. Pure text queries using aquery()
-        text_queries = [
-            "What is the main content of the document?",
-            "What are the key topics discussed?",
-        ]
-
-        for query in text_queries:
-            logger.info(f"\n[Text Query]: {query}")
-            result = await rag.aquery(query, mode="hybrid")
-            logger.info(f"Answer: {result}")
-
-        # 2. Multimodal query with specific multimodal content using aquery_with_multimodal()
-        logger.info(
-            "\n[Multimodal Query]: Analyzing performance data in context of document"
-        )
+        # )
         multimodal_result = await rag.aquery_with_multimodal(
-            "Compare this performance data with any similar results mentioned in the document",
+            "based on this image, design a VQA for model training and output in json file format: {\"question\":\"\",\"answer\":\"\"}",
             multimodal_content=[
                 {
-                    "type": "table",
-                    "table_data": """Method,Accuracy,Processing_Time
-                                RAGAnything,95.2%,120ms
-                                Traditional_RAG,87.3%,180ms
-                                Baseline,82.1%,200ms""",
+                    "type": "image",
+                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/f4259fd7ca5e4ebfa794f215dafee93fa584ce3102ec5d8b0a8291bb085ab6a3.jpg" ,
                     "table_caption": "Performance comparison results",
                 }
             ],
             mode="hybrid",
         )
+       
+        
         logger.info(f"Answer: {multimodal_result}")
 
-        # 3. Another multimodal query with equation content
-        logger.info("\n[Multimodal Query]: Mathematical formula analysis")
-        equation_result = await rag.aquery_with_multimodal(
-            "Explain this formula and relate it to any mathematical concepts in the document",
+        print("===="*50)
+        multimodal_result = await rag.aquery_with_multimodal(
+            "based on this image, design a VQA for model training and output in json file format: {\"question\":\"\",\"answer\":\"\"}",
             multimodal_content=[
                 {
-                    "type": "equation",
-                    "latex": "F1 = 2 \\cdot \\frac{precision \\cdot recall}{precision + recall}",
-                    "equation_caption": "F1-score calculation formula",
+                    "type": "image",
+                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/ee9b29a09dae4b03125b0cf711351731a81fc55c73caa9318a90d294a88dc86a.jpg" ,
+                    "table_caption": "Performance comparison results",
                 }
             ],
             mode="hybrid",
         )
-        logger.info(f"Answer: {equation_result}")
+       
+        
+        logger.info(f"Answer: {multimodal_result}")
+        print("===="*50)
+        multimodal_result = await rag.aquery_with_multimodal(
+            "what does this image show the structure of ?",
+            multimodal_content=[
+                {
+                    "type": "image",
+                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/Screenshot 2025-12-16 at 15.38.20.png" ,
+                   
+                }
+            ],
+            mode="hybrid",
+        )
+       
+        
+        logger.info(f"Answer: {multimodal_result}")
+        print("===="*50)
+        query = "what is the feature of Capacitor structure schematic"
+        result = await rag.aquery(query, mode="hybrid")
+        logger.info(f"Answer: {result}")
+
+        print("===="*50)
+        query = "how to estimate structure of ZnO wurtzite"
+        result = await rag.aquery(query, mode="hybrid")
+        logger.info(f"Answer: {result}")
+        
+
+
 
     except Exception as e:
         logger.error(f"Error processing with RAG: {str(e)}")
@@ -279,12 +285,12 @@ def main():
     )
     parser.add_argument(
         "--api-key",
-        default="",
+        default="d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
         help="OpenAI API key (defaults to LLM_BINDING_API_KEY env var)",
     )
     parser.add_argument(
         "--base-url",
-        default="http://10.10.11.53:8000/v1",
+        default="https://ark.cn-beijing.volces.com/api/v3",
         help="Optional base URL for API",
     )
     parser.add_argument(
