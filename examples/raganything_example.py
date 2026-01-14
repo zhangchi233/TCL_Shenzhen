@@ -178,11 +178,11 @@ async def process_with_rag(
                 return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
 
         # Define embedding function - using environment variables for configuration
-        embedding_dim = int(os.getenv("EMBEDDING_DIM", "2048"))
+        # embedding_dim = int(os.getenv("EMBEDDING_DIM", "2048"))
         embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
         
         embedding_func = EmbeddingFunc(
-            embedding_dim=embedding_dim,
+            embedding_dim=2048,
             max_token_size=8192,
             func=lambda texts: openai_embed(
                 texts,
@@ -190,6 +190,7 @@ async def process_with_rag(
                 api_key="d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
                 base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
+            
         )
 
         # Initialize RAGAnything with new dataclass structure
@@ -203,57 +204,57 @@ async def process_with_rag(
 
         # Process document
         await rag.process_document_complete(
-            file_path=file_path, output_dir=output_dir, parse_method="auto"
+            file_path=file_path, output_dir=output_dir, parse_method="auto",source= "modelscope"
         )
         rag.finalize_storages()
-        # Example queries - demonstrating different query approaches
-        logger.info("\nQuerying processed document:")
+        # # Example queries - demonstrating different query approaches
+        # logger.info("\nQuerying processed document:")
 
-        # 1. Pure text queries using aquery()
-        text_queries = [
-            "What is the main content of the document?",
-            "What are the key topics discussed?",
-        ]
+        # # 1. Pure text queries using aquery()
+        # text_queries = [
+        #     "What is the main content of the document?",
+        #     "What are the key topics discussed?",
+        # ]
 
-        for query in text_queries:
-            logger.info(f"\n[Text Query]: {query}")
-            result = await rag.aquery(query, mode="hybrid")
-            logger.info(f"Answer: {result}")
+        # for query in text_queries:
+        #     logger.info(f"\n[Text Query]: {query}")
+        #     result = await rag.aquery(query, mode="hybrid")
+        #     logger.info(f"Answer: {result}")
 
-        # 2. Multimodal query with specific multimodal content using aquery_with_multimodal()
-        logger.info(
-            "\n[Multimodal Query]: Analyzing performance data in context of document"
-        )
-        multimodal_result = await rag.aquery_with_multimodal(
-            "Compare this performance data with any similar results mentioned in the document",
-            multimodal_content=[
-                {
-                    "type": "table",
-                    "table_data": """Method,Accuracy,Processing_Time
-                                RAGAnything,95.2%,120ms
-                                Traditional_RAG,87.3%,180ms
-                                Baseline,82.1%,200ms""",
-                    "table_caption": "Performance comparison results",
-                }
-            ],
-            mode="hybrid",
-        )
-        logger.info(f"Answer: {multimodal_result}")
+        # # 2. Multimodal query with specific multimodal content using aquery_with_multimodal()
+        # logger.info(
+        #     "\n[Multimodal Query]: Analyzing performance data in context of document"
+        # )
+        # multimodal_result = await rag.aquery_with_multimodal(
+        #     "Compare this performance data with any similar results mentioned in the document",
+        #     multimodal_content=[
+        #         {
+        #             "type": "table",
+        #             "table_data": """Method,Accuracy,Processing_Time
+        #                         RAGAnything,95.2%,120ms
+        #                         Traditional_RAG,87.3%,180ms
+        #                         Baseline,82.1%,200ms""",
+        #             "table_caption": "Performance comparison results",
+        #         }
+        #     ],
+        #     mode="hybrid",
+        # )
+        # logger.info(f"Answer: {multimodal_result}")
 
-        # 3. Another multimodal query with equation content
-        logger.info("\n[Multimodal Query]: Mathematical formula analysis")
-        equation_result = await rag.aquery_with_multimodal(
-            "Explain this formula and relate it to any mathematical concepts in the document",
-            multimodal_content=[
-                {
-                    "type": "equation",
-                    "latex": "F1 = 2 \\cdot \\frac{precision \\cdot recall}{precision + recall}",
-                    "equation_caption": "F1-score calculation formula",
-                }
-            ],
-            mode="hybrid",
-        )
-        logger.info(f"Answer: {equation_result}")
+        # # 3. Another multimodal query with equation content
+        # logger.info("\n[Multimodal Query]: Mathematical formula analysis")
+        # equation_result = await rag.aquery_with_multimodal(
+        #     "Explain this formula and relate it to any mathematical concepts in the document",
+        #     multimodal_content=[
+        #         {
+        #             "type": "equation",
+        #             "latex": "F1 = 2 \\cdot \\frac{precision \\cdot recall}{precision + recall}",
+        #             "equation_caption": "F1-score calculation formula",
+        #         }
+        #     ],
+        #     mode="hybrid",
+        # )
+        # logger.info(f"Answer: {equation_result}")
 
     except Exception as e:
         logger.error(f"Error processing with RAG: {str(e)}")
@@ -265,9 +266,9 @@ async def process_with_rag(
 def main():
     """Main function to run the example"""
     parser = argparse.ArgumentParser(description="MinerU RAG Example")
-    parser.add_argument("--file_path",default = "/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/pdfs/aps.65.128504.pdf", help="Path to the document to process")
+    parser.add_argument("--file_path",default = "/mnt/storage/dataset/PPVL_reuslts_CN/Image_caption_Prompt_Generatrion/taxnomy_system/temp_pdfs", help="Path to the document to process")
     parser.add_argument(
-        "--working_dir", "-w", default="./rag_storage", help="Working directory path"
+        "--working_dir", "-w", default="./rag_test_examples", help="Working directory path"
     )
     parser.add_argument(
         "--output", "-o", default="./output", help="Output directory path"
@@ -284,7 +285,7 @@ def main():
     )
     parser.add_argument(
         "--parser",
-        default=os.getenv("PARSER", "mineru"),
+        default="mineru",
         help="Optional base URL for API",
     )
 
@@ -301,9 +302,17 @@ def main():
         os.makedirs(args.output, exist_ok=True)
 
     # Process with RAG
-    asyncio.run(
+    import asyncio 
+
+    async def gather_tasks(tasks):
+        return await asyncio.gather(**[tasks])
+    files = os.listdir(args.file_path)
+    files = [os.path.join("/mnt/storage/dataset/PPVL_reuslts_CN/Image_caption_Prompt_Generatrion/taxnomy_system/temp_pdfs",file) for file in files]
+    for file in files[:5]:
+        print(file)
+        asyncio.run(
         process_with_rag(
-            args.file_path,
+            file,
             args.output,
             args.api_key,
             args.base_url,

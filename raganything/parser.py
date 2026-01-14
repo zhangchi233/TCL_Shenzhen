@@ -647,7 +647,7 @@ class MineruParser(Parser):
 
         output_lines = []
         error_lines = []
-
+        print(f"Executing mineru command: {' '.join(cmd)}")
         try:
             # Prepare subprocess parameters to hide console window on Windows
             import platform
@@ -655,7 +655,7 @@ class MineruParser(Parser):
             from queue import Queue, Empty
 
             # Log the command being executed
-            logging.info(f"Executing mineru command: {' '.join(cmd)}")
+         
 
             subprocess_kwargs = {
                 "stdout": subprocess.PIPE,
@@ -770,6 +770,7 @@ class MineruParser(Parser):
                 logging.info("[MinerU] Command executed successfully")
 
         except MineruExecutionError:
+            logging.info(f"[MinerU] Command executed successfully {str(MineruExecutionError)}")
             raise
         except subprocess.CalledProcessError as e:
             logging.error(f"Error running mineru subprocess command: {e}")
@@ -807,10 +808,13 @@ class MineruParser(Parser):
 
         file_stem_subdir = output_dir / file_stem
         if file_stem_subdir.exists():
+            if method == "auto":
+                method = "hybrid_auto"
+            
             md_file = file_stem_subdir / method / f"{file_stem}.md"
             json_file = file_stem_subdir / method / f"{file_stem}_content_list.json"
             images_base_dir = file_stem_subdir / method
-
+        print("[MINERU] read md file,json-file,output_dir is:",md_file,json_file,images_base_dir)
         # Read markdown content
         md_content = ""
         if md_file.exists():
@@ -889,7 +893,7 @@ class MineruParser(Parser):
                 base_output_dir = pdf_path.parent / "mineru_output"
 
             base_output_dir.mkdir(parents=True, exist_ok=True)
-
+            print(base_output_dir,method)
             # Run mineru command
             self._run_mineru_command(
                 input_path=pdf_path,
@@ -907,6 +911,7 @@ class MineruParser(Parser):
             content_list, _ = self._read_output_files(
                 base_output_dir, name_without_suff, method=method
             )
+            print
             return content_list
 
         except MineruExecutionError:
@@ -1035,6 +1040,7 @@ class MineruParser(Parser):
 
             try:
                 # Run mineru command (images are processed with OCR method)
+                print(actual_image_path,base_output_dir)
                 self._run_mineru_command(
                     input_path=actual_image_path,
                     output_dir=base_output_dir,

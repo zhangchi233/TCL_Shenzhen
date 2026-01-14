@@ -205,64 +205,22 @@ async def process_with_rag(
             vision_model_func=vision_model_func,
             embedding_func=embedding_func,
         )
+        img="/mnt/storage/dataset/PPVL_reuslts_CN/中文/wanfang202507/微显示技术/微显示技术/硅基OLED/一种提高硅基OLED微显示器温补能力的驱动电路设计与实现/imgs/img_in_image_box_643_1646_1738_2411.jpg"
+        question = "What does this image show?"
+        print("IMAGE_PATH:", img, "\n Query: ", question)
 
-
-        # )
         multimodal_result = await rag.aquery_with_multimodal(
-            "based on this image, design a VQA for model training and output in json file format: {\"question\":\"\",\"answer\":\"\"}",
+            "Describe this image",
             multimodal_content=[
                 {
-                    "type": "image",
-                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/f4259fd7ca5e4ebfa794f215dafee93fa584ce3102ec5d8b0a8291bb085ab6a3.jpg" ,
-                    "table_caption": "Performance comparison results",
+                    "type": question,
+                    "image_path": img,
                 }
             ],
             mode="hybrid",
         )
-       
-        
-        logger.info(f"Answer: {multimodal_result}")
 
-        print("===="*50)
-        multimodal_result = await rag.aquery_with_multimodal(
-            "based on this image, design a VQA for model training and output in json file format: {\"question\":\"\",\"answer\":\"\"}",
-            multimodal_content=[
-                {
-                    "type": "image",
-                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/ee9b29a09dae4b03125b0cf711351731a81fc55c73caa9318a90d294a88dc86a.jpg" ,
-                    "table_caption": "Performance comparison results",
-                }
-            ],
-            mode="hybrid",
-        )
-       
-        
-        logger.info(f"Answer: {multimodal_result}")
-        print("===="*50)
-        multimodal_result = await rag.aquery_with_multimodal(
-            "what does this image show the structure of ?",
-            multimodal_content=[
-                {
-                    "type": "image",
-                    "image_path":"/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/output/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf/auto/images/Screenshot 2025-12-16 at 15.38.20.png" ,
-                   
-                }
-            ],
-            mode="hybrid",
-        )
-       
-        
-        logger.info(f"Answer: {multimodal_result}")
-        print("===="*50)
-        query = "what is the feature of Capacitor structure schematic"
-        result = await rag.aquery(query, mode="hybrid")
-        logger.info(f"Answer: {result}")
-
-        print("===="*50)
-        query = "how to estimate structure of ZnO wurtzite"
-        result = await rag.aquery(query, mode="hybrid")
-        logger.info(f"Answer: {result}")
-        
+        print(multimodal_result)
 
 
 
@@ -278,10 +236,10 @@ def main():
     parser = argparse.ArgumentParser(description="MinerU RAG Example")
     parser.add_argument("--file_path",default = "/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/pdfs/氧化物TFT源栅极短路缺陷原因解析及抑制措施_NormalPdf.pdf", help="Path to the document to process")
     parser.add_argument(
-        "--working_dir", "-w", default="./rag_storage", help="Working directory path"
+        "--working_dir", "-w", default="/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/examples/local/pdfs/rag", help="Working directory path"
     )
     parser.add_argument(
-        "--output", "-o", default="./output", help="Output directory path"
+        "--output", "-o", default="/mnt/storage/dataset/PPVL_reuslts_CN/RAG-Anything/examples/local/pdfs/output", help="Output directory path"
     )
     parser.add_argument(
         "--api-key",

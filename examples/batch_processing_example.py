@@ -506,8 +506,8 @@ async def main():
     # Run demonstrations
     print("\n🚀 Starting demonstrations...")
 
-    # Basic batch processing
-    results["basic"] = demonstrate_basic_batch_processing()
+    # # Basic batch processing
+    # results["basic"] = demonstrate_basic_batch_processing()
 
     # Asynchronous processing
     results["async"] = await demonstrate_async_batch_processing()
