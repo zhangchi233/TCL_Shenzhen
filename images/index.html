@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评测工具 (修复版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --header-bg: #f8fafc;
+            --border: #e2e8f0;
+            --text: #334155;
+            --code-bg: #f1f5f9;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Controls --- */
+        .controls {
+            padding: 12px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: white;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .btn:hover { background: #f1f5f9; }
+        .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        .header-note {
+            font-size: 12px;
+            color: #64748b;
+            background: #f1f5f9;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* --- Table --- */
+        .table-container {
+            flex: 1;
+            overflow: auto; 
+            position: relative;
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            width: 100%; 
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            background: white;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* --- Header Styles --- */
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--header-bg);
+            font-weight: 600;
+            color: var(--text);
+            z-index: 10;
+            user-select: none;
+            display: table-cell; 
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 100%;
+        }
+
+        .collapse-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+            flex-shrink: 0;
+            transition: 0.2s;
+        }
+        .collapse-btn:hover { background: #cbd5e1; color: #334155; }
+
+        .resizer {
+            position: absolute; right: 0; top: 0; height: 100%; width: 5px;
+            background: transparent; cursor: col-resize; z-index: 11;
+        }
+        .resizer:hover, .resizing { background: var(--primary); width: 7px; }
+
+        /* --- Collapsed State --- */
+        th.collapsed, td.collapsed {
+            width: 40px !important;
+            min-width: 40px !important;
+            max-width: 40px !important;
+            padding: 5px !important;
+            background: #f8fafc;
+        }
+        .collapsed .cell-wrapper, .collapsed .header-text, .collapsed .resizer,
+        .collapsed .img-cell, .collapsed .score-row, .collapsed .comment-box {
+            display: none !important;
+        }
+        .collapsed .header-content { justify-content: center; }
+        .collapsed .collapse-btn { background: var(--primary); color: white; }
+
+        /* --- Cell Content --- */
+        .cell-wrapper {
+            position: relative;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 25px;
+        }
+
+        .md-view { font-size: 13px; line-height: 1.6; color: #1e293b; }
+        .md-view p, .md-view ul { margin: 0 0 8px 0; }
+        .md-view code { background: var(--code-bg); padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 12px; color: #d63384; }
+        .md-view pre { background: var(--code-bg); padding: 8px; border-radius: 4px; overflow-x: auto; }
+        
+        .raw-view {
+            font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #64748b;
+            background: #f8fafc; padding: 8px; border: 1px dashed #cbd5e1; display: none;
+        }
+
+        .toggle-btn {
+            position: absolute; top: 0; right: 0; width: 24px; height: 24px;
+            border: 1px solid #cbd5e1; background: white; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            font-size: 14px; opacity: 0.6; z-index: 5;
+        }
+        .toggle-btn:hover { opacity: 1; color: var(--primary); }
+
+        .tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin: 2px; }
+
+        .img-cell img { width: 100%; border: 1px solid #eee; cursor: pointer; }
+        .img-cell .fname { font-size: 11px; color: #888; margin-top: 4px; word-break: break-all;}
+
+        .score-row { display: flex; gap: 4px; margin-bottom: 5px; }
+        .score-btn { flex: 1; text-align: center; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 0; font-size: 12px; }
+        .score-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        textarea.comment-box { width: 100%; height: 60px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical; }
+
+        #modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:999; justify-content:center; align-items:center; }
+        #modal img { max-width:95%; max-height:95%; }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <input type="file" id="fileInput" accept=".json,.jsonl" style="display:none" onchange="loadFile(this)">
+    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">📂 加载 JSON</button>
+    <div style="flex:1"></div>
+    
+    <div class="header-note">
+        <span>👀 支持列折叠 & MD渲染</span>
+    </div>
+
+    <div style="width:20px"></div>
+    <span id="status" style="font-size:12px; color:#666; margin-right:10px">等待加载...</span>
+    <button class="btn" onclick="exportData()">💾 导出结果</button>
+</div>
+
+<div class="table-container">
+    <table id="dataTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<div id="modal" onclick="this.style.display='none'"><img id="modalImg"></div>
+
+<script>
+    let dataset = [];
+    let dynamicKeys = [];
+
+    const DEFAULT_WIDTHS = {
+        'image_path': '200px',
+        'Evaluation': '250px',
+        'caption_original': '300px',
+        'caption_expanded': '450px',
+        'entities_extracted': '200px',
+        'background_verified': '350px'
+    };
+
+    function loadFile(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result.trim();
+                if (text.startsWith('[')) dataset = JSON.parse(text);
+                else dataset = text.split('\n').filter(l=>l.trim()).map(JSON.parse);
+                
+                dataset.forEach(d => {
+                    if (d.human_score === undefined) d.human_score = null;
+                    if (d.human_comment === undefined) d.human_comment = "";
+                });
+
+                analyzeKeys(dataset);
+                renderTable();
+                document.getElementById('status').innerText = `已加载 ${dataset.length} 条数据`;
+            } catch (err) { alert("JSON解析错误"); console.error(err); }
+        };
+        reader.readAsText(file);
+    }
+
+    function analyzeKeys(data) {
+        const keySet = new Set();
+        data.forEach(item => Object.keys(item).forEach(k => keySet.add(k)));
+        ['image_path', 'human_score', 'human_comment'].forEach(k => keySet.delete(k));
+        dynamicKeys = Array.from(keySet);
+    }
+
+    function renderTable() {
+        const thead = document.getElementById('tableHead');
+        const tbody = document.getElementById('tableBody');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        // --- Header ---
+        const trHead = document.createElement('tr');
+        let colIndex = 0;
+        createHeaderCell(trHead, 'Image Input', 'image_path', colIndex++);
+        dynamicKeys.forEach(key => createHeaderCell(trHead, key, key, colIndex++));
+        createHeaderCell(trHead, 'Evaluation', 'Evaluation', colIndex++);
+        thead.appendChild(trHead);
+
+        // --- Body ---
+        dataset.forEach((item, index) => {
+            const tr = document.createElement('tr');
+
+            // 1. Image
+            const filename = item.image_path ? item.image_path.split(/[/\\]/).pop() : 'No Image';
+            const tdImg = document.createElement('td');
+            tdImg.innerHTML = `
+                <div class="img-cell">
+                    <img src="./${filename}" onerror="this.src='https://placehold.co/100?text=No+Img'" onclick="showModal(this.src)">
+                    <div class="fname">${filename}</div>
+                </div>
+            `;
+            tr.appendChild(tdImg);
+
+            // 2. Dynamic Cols
+            dynamicKeys.forEach(key => {
+                const td = document.createElement('td');
+                td.innerHTML = formatContentWithToggle(item[key]);
+                tr.appendChild(td);
+            });
+
+            // 3. Eval (修复部分)
+            const tdEval = document.createElement('td');
+            tdEval.innerHTML = `
+                <div class="score-row">
+                    ${[0,1,2,3,4,5].map(s => 
+                        `<div class="score-btn ${item.human_score===s?'active':''}" onclick="setScore(${index},${s})">${s}</div>`
+                    ).join('')}
+                </div>
+                <textarea class="comment-box" 
+                          placeholder="Comment..." 
+                          oninput="updateComment(${index}, this.value)">${item.human_comment ? item.human_comment.replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</textarea>
+            `;
+            tr.appendChild(tdEval);
+
+            tbody.appendChild(tr);
+        });
+
+        initResize();
+    }
+
+    function createHeaderCell(tr, text, key, colIndex) {
+        const th = document.createElement('th');
+        const w = DEFAULT_WIDTHS[key] || '250px';
+        th.style.width = w;
+
+        const container = document.createElement('div');
+        container.className = 'header-content';
+
+        const collapseBtn = document.createElement('div');
+        collapseBtn.className = 'collapse-btn';
+        collapseBtn.innerText = '−';
+        collapseBtn.title = '折叠/展开此列';
+        collapseBtn.onclick = (e) => toggleColumn(colIndex, e.target);
+
+        const span = document.createElement('span');
+        span.className = 'header-text';
+        span.innerText = text;
+
+        container.appendChild(collapseBtn);
+        container.appendChild(span);
+        th.appendChild(container);
+
+        const resizer = document.createElement('div');
+        resizer.className = 'resizer';
+        th.appendChild(resizer);
+        
+        tr.appendChild(th);
+    }
+
+    function toggleColumn(colIndex, btnElement) {
+        const table = document.getElementById('dataTable');
+        const headRow = table.tHead.rows[0];
+        const bodyRows = table.tBodies[0].rows;
+        const th = headRow.cells[colIndex];
+        const isCollapsed = th.classList.contains('collapsed');
+
+        if (isCollapsed) {
+            th.classList.remove('collapsed');
+            btnElement.innerText = '−';
+            for (let row of bodyRows) row.cells[colIndex].classList.remove('collapsed');
+        } else {
+            th.classList.add('collapsed');
+            btnElement.innerText = '+';
+            for (let row of bodyRows) row.cells[colIndex].classList.add('collapsed');
+        }
+    }
+
+    function formatContentWithToggle(val) {
+        if (val === undefined || val === null) return '<div class="cell-wrapper" style="color:#ddd">-</div>';
+
+        let isJson = false;
+        let jsonObj = null;
+
+        if (typeof val === 'object') {
+            isJson = true; jsonObj = val;
+        } else if (typeof val === 'string' && (val.trim().startsWith('[') || val.trim().startsWith('{'))) {
+            try {
+                jsonObj = JSON.parse(val.replace(/```json|```/g, '').trim());
+                isJson = true;
+            } catch(e) {}
+        }
+
+        if (isJson) {
+            return `<div class="cell-wrapper">${formatJson(jsonObj)}</div>`;
+        }
+
+        const rawText = String(val);
+        const renderedHtml = marked.parse(rawText);
+
+        return `
+            <div class="cell-wrapper">
+                <button class="toggle-btn" onclick="toggleMd(this)" title="切换 Markdown / 原文">📝</button>
+                <div class="md-view">${renderedHtml}</div>
+                <div class="raw-view">${escapeHtml(rawText)}</div>
+            </div>
+        `;
+    }
+
+    window.toggleMd = function(btn) {
+        const wrapper = btn.parentElement;
+        const mdView = wrapper.querySelector('.md-view');
+        const rawView = wrapper.querySelector('.raw-view');
+        if (getComputedStyle(rawView).display === 'none') {
+            mdView.style.display = 'none'; rawView.style.display = 'block'; btn.style.background = '#f1f5f9';
+        } else {
+            mdView.style.display = 'block'; rawView.style.display = 'none'; btn.style.background = 'white';
+        }
+    };
+
+    function formatJson(obj) {
+        if (Array.isArray(obj)) return obj.map(x => `<span class="tag">${x}</span>`).join('');
+        return `<pre style="font-size:11px; margin:0; background:#f1f5f9; padding:5px;">${JSON.stringify(obj, null, 2)}</pre>`;
+    }
+
+    function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    function initResize() {
+        const cols = document.querySelectorAll('th');
+        cols.forEach(col => {
+            const resizer = col.querySelector('.resizer');
+            if (!resizer) return;
+            let x=0, w=0;
+            const md = (e) => { x=e.clientX; w=parseInt(window.getComputedStyle(col).width, 10); document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); resizer.classList.add('resizing'); };
+            const mm = (e) => { col.style.width = `${w + e.clientX - x}px`; };
+            const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); resizer.classList.remove('resizing'); };
+            resizer.addEventListener('mousedown', md);
+        });
+    }
+
+    // --- Data Update Logic (修复的核心部分) ---
+    window.setScore = (idx, score) => {
+        dataset[idx].human_score = score;
+        const row = document.getElementById('tableBody').children[idx];
+        const btns = row.lastElementChild.querySelectorAll('.score-btn');
+        btns.forEach((b, i) => b.classList.toggle('active', i === score));
+    }
+
+    // 新增：专门处理评论更新的函数
+    window.updateComment = (idx, value) => {
+        dataset[idx].human_comment = value;
+    }
+
+    window.exportData = () => {
+        if(!dataset.length) return;
+        const blob = new Blob([JSON.stringify(dataset, null, 2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'eval_result.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+
+    window.showModal = (src) => {
+        document.getElementById('modalImg').src = src;
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+</script>
+</body>
+</html>

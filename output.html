@@ -1,0 +1,100 @@
+import json
+import os
+
+# 读取 TEMP.JSON 文件
+json_file = "./temp_images/temp.json"
+images_dir = "temp_images"
+output_html = "output.html"
+
+# 确保 TEMP.JSON 存在
+if not os.path.exists(json_file):
+    raise FileNotFoundError(f"{json_file} not found!")
+
+# 读取 JSON 文件内容
+with open(json_file, "r", encoding="utf-8") as file:
+    data = json.load(file)
+
+# 确保 temp_images 目录存在
+if not os.path.exists(images_dir):
+    raise FileNotFoundError(f"{images_dir} directory not found!")
+
+# 生成 HTML 内容
+html_content = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Gallery</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+        }
+        img {
+            width: 512px;
+            height: 512px;
+            object-fit: cover;
+        }
+        .separator {
+            border-left: 2px solid #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Gallery</h1>
+    <table>
+"""
+
+# 遍历 JSON 数据，假设每个元素是一个字典
+for item in data:
+    html_content += "<tr>"
+    for key in item:
+        if key == "images":
+            img = item[key]
+            img = "./temp_images/" + img.split("/")[-1]
+            html_content += f"""
+            <td>
+                <div>
+                    <img src="{img}" alt="{img}">
+                </div>
+            </td>
+            """
+        elif isinstance(item[key], str):
+            html_content += f"""
+            <td class="separator">
+                <p>{key}: {item[key]}</p>
+            </td>
+            """
+        elif isinstance(item[key], list):
+            text = "<br>".join(item[key])
+            html_content += f"""
+            <td class="separator">
+                <p>{key}: {text}</p>
+            </td>
+            """
+    html_content += "</tr>"
+
+# 结束 HTML 内容
+html_content += """
+    </table>
+</body>
+</html>
+"""
+
+# 写入 HTML 文件
+with open(output_html, "w", encoding="utf-8") as file:
+    file.write(html_content)
+
+print(f"HTML file generated: {output_html}")
