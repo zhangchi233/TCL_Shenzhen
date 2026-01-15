@@ -5,6 +5,7 @@ import json
 import os
 import pandas as pd
 import io
+from rag.kg import run_single_test,process_with_rag
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
 from hintfactory import HintFactory
@@ -128,7 +129,7 @@ def step1_5_extract_contextual_knowledge(original_caption, context):
     # response = mock_llm_call(prompt)
     # return json.loads(response)
     return prompt
-def step2_generate_background(original_caption, entities):
+def step2_generate_background_rag(original_caption,rag_content, entities):
     """
     第二步：背景知识生成
     目的：利用模型内部知识库生成背景信息（暂不考虑是否与图片冲突，先发散）。
@@ -142,14 +143,17 @@ def step2_generate_background(original_caption, entities):
 
     # Context
     原始语境: "{original_caption}"
+    外部数据源: "{rag_content}"
     需要扩充的实体: [{entities_str}]
 
     # Task
-    请为上述实体生成背景知识简报。
+    请为上述实体和给定的一部分外部数据源生成背景知识简报。
     
     # Requirements
     1. 每个实体的介绍要详细具体，返回所有可能相关的背景知识。
     2. 保持客观中立，不要加入主观评论。
+    3. 返回的背景知识可以结合给定的外部数据源信息作参考，但是外部数据源不是必须包含的内容，且内容不一定完全准确，需要你根据自己的知识进行有选择的筛选和整合。
+    
     
     # Output Format
     请直接输出整理好的背景知识文本段落，不需要JSON。
@@ -278,65 +282,87 @@ async def openai_call(client,image,prompt,model):
 # ==========================================
 # 模拟执行流程 (Pipeline)
 # ==========================================
-async def process_single_caption(image,caption, context,use_openai=False,model ="gpt-4-vision-preview",api_key = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"):
-    if use_openai:
-        client = AsyncOpenAI(api_key=api_key)
-    else:
-        client = genai.Client(api_key=api_key).aio
-    print("--- Start one Image ---")
-    step1_prompt = step1_extract_entities(caption)
-    #print(f"Step 1 Prompt: {step1_prompt}")
-    response = await (openai_call(client,image,step1_prompt,model) if use_openai else google_call(client,image,step1_prompt))
-    entities = parse_json_list(response)
+async def process_single_caption(rag,image,caption, context,use_openai=False,model ="gpt-4-vision-preview",api_key = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"):
+    try:
+        if use_openai:
+            client = AsyncOpenAI(api_key=api_key)
+        else:
+            client = genai.Client(api_key=api_key).aio
+        print("--- Start one Image ---")
+        step1_prompt = step1_extract_entities(caption)
+        #print(f"Step 1 Prompt: {step1_prompt}")
+        response = await (openai_call(client,image,step1_prompt,model) if use_openai else google_call(client,image,step1_prompt))
+        entities = parse_json_list(response)
+        rag_contents = await run_single_test(rag,caption = "/n".join(entities))
+        step2_prompt = step2_generate_background_rag(caption,rag_contents, entities)
+        response = await (openai_call(client,image,step2_prompt,model) if use_openai else google_call(client,image,step2_prompt))
+        
+        raw_background_info = response
     
-    step2_prompt = step2_generate_background(caption, entities)
-    response = await (openai_call(client,image,step2_prompt,model) if use_openai else google_call(client,image,step2_prompt))
-    
-    raw_background_info = response
-   
-    context_response = step1_5_extract_contextual_knowledge(caption, context)
-    
-    step3_prompt = step3_visual_fact_check(image, caption, raw_background_info)
-    response = await (openai_call(client,image,step3_prompt,model) if use_openai else google_call(client,image,step3_prompt))
-    verified_background = response
-    
-    step4_prompt = step4_integrate_final_caption(caption, verified_background,context_response)
-    response = await (openai_call(client,image,step4_prompt,model) if use_openai else google_call(client,image,step4_prompt))
-    final_caption = response
-    print(f"Step 1 Extracted: {entities}")
-    print(f"Step 1.5 Contextual Knowledge Prompt: {context_response}")
-    print(f"Step 2 Generated Background Info: {raw_background_info}")
-    print(f"Step 3 Verified Background Info: {verified_background}")
-    print(f"Step 4 Final Caption: {final_caption}")
-    return {
-        "image_path":image,
-        "caption_original": caption,
-        "caption_expanded": final_caption,
-        "entities_extracted": entities,
-        "background_raw": raw_background_info,
-        "background_verified": verified_background,
-        "contextual_knowledge": context_response
-    }
+        context_response = step1_5_extract_contextual_knowledge(caption, context)
+        
+        step3_prompt = step3_visual_fact_check(image, caption, raw_background_info)
+        response = await (openai_call(client,image,step3_prompt,model) if use_openai else google_call(client,image,step3_prompt))
+        verified_background = response
+        
+        step4_prompt = step4_integrate_final_caption(caption, verified_background,context_response)
+        response = await (openai_call(client,image,step4_prompt,model) if use_openai else google_call(client,image,step4_prompt))
+        final_caption = response
+        print(f"Step 1 Extracted: {entities}")
+        print(f"Step 1.5 Contextual Knowledge Prompt: {context_response}")
+        print(f"Step 2 Generated Background Info: {raw_background_info}")
+        print(f"Step 3 Verified Background Info: {verified_background}")
+        print(f"Step 4 Final Caption: {final_caption}")
+        return {
+            "image_path":image,
+            "caption_original": caption,
+            "caption_expanded": final_caption,
+            "entities_extracted": entities,
+            "background_raw": raw_background_info,
+            "background_verified": verified_background,
+            "contextual_knowledge": context_response,
+            "rag_content": rag_contents,
+            "original_context":context
+        }
+    except Exception as e:
+        # raise e
+        return {
+            "image_path":image,
+            "caption_original": "connection error related to gemini3",
+            "caption_expanded": "connection error related to gemini3",
+            "entities_extracted": "connection error related to gemini3",
+            "background_raw": "connection error related to gemini3",
+            "background_verified": "connection error related to gemini3",
+            "contextual_knowledge": "connection error related to gemini3",
+            "rag_content": "connection error related to gemini3",
+            "original_context":"connection error related to gemini3"
+        }
 
     
         
-def main_pipeline(image_inputs, original_caption_inputs,contexts,cores = 16):
+def main_pipeline(image_inputs, original_caption_inputs,contexts,cores = 32):
     from asyncio import Semaphore
     lock = Semaphore(cores)
+    kg = asyncio.run(process_with_rag(
+        file_path= "/home/maxzhang/RAG-Anything/rag_test_examples",
+        api_key= "d69ffc82-6fdd-48ea-bff3-5dd4daf8439a",
+        base_url = "https://ark.cn-beijing.volces.com/api/v3",
+        parser = "mineru",
+    ))
     async def gather_tasks(lock):
         
         tasks = [
-            process_single_caption(image,caption,context) for image,caption,context in zip(image_inputs,original_caption_inputs,contexts)
-        ]
+            process_single_caption(kg,image,caption,context) for image,caption,context in zip(image_inputs,original_caption_inputs,contexts)]
         async with lock:
             tasks = await asyncio.gather(*tasks)
         return tasks
     return asyncio.run(gather_tasks(lock))
 if __name__=="__main__":
     import json 
-    data = "./temp_images/temp2.json"
+    data = "/home/maxzhang/datapipeline/temp_images/temp_images.json"
     data = json.load(open(data))
     images,captions,contexts = [],[],[]
+    print("Total Samples:", len(data))
     for sample in data:
         img = sample["images"][0]
         img = os.path.join("./temp_images",img.split("/")[-1])
@@ -346,7 +372,7 @@ if __name__=="__main__":
         captions.append(caption)
         contexts.append(context)
     results = main_pipeline(images,captions,contexts,cores=4)
-    with open("./temp_images/expanded_captions_new.json","w") as f:
+    with open("./temp_images/expanded_captions_kg.json","w") as f:
         json.dump(results,f,ensure_ascii=False,indent=2)
         
         

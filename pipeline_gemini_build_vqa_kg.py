@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 from hintfactory import HintFactory
 from google import genai
 from google.genai import types
+from rag.kg import run_single_test,process_with_rag
 # ==========================================
 # 1. 配置与定义
 # ==========================================
@@ -251,7 +252,7 @@ class AsyncLabelingPipeline:
         #                           api_key="d075fa90-7412-4208-9776-188332b1f2f9")
         google_api_key = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"
         self.client = genai.Client(api_key=google_api_key).aio
-                                  
+        self.rag = process_with_rag(file_path="/home/maxzhang/RAG-Anything/rag_test_examples")
         self.taxonomy_list = parse_taxonomy(taxonomy_csv)
         self.system_prompt = build_system_prompt(self.taxonomy_list)
         self.semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT) # 限制并发数
@@ -291,7 +292,7 @@ class AsyncLabelingPipeline:
                 return result_json
 
             except Exception as e:
-                raise e
+                # raise e
                 print(f"❌ [ID: {item['id']}] Error: {str(e)}")
                 return {
                     "id": item['id'], 
@@ -349,7 +350,7 @@ class AsyncLabelingPipeline:
                 return final_output
 
             except Exception as e:
-                raise e
+                # raise e
                 print(f"❌ [ID: {item['id']}] Keyword Extraction Error: {str(e)}")
                 return {
                     "id": item['id'], 
@@ -359,13 +360,48 @@ class AsyncLabelingPipeline:
                 }
 
     
-    def build_vqa_generation_prompt(self, l3_tag=None, image_type=None, hint=None,keyword=None):
+    def build_vqa_generation_prompt(self, l3_tag=None, image_type=None, hint=None,keyword=None, external_background=None):
         """
         构建生成 QA 对的 Prompt Template
         核心策略：Context + Image -> Specialized Hint -> QA Pair
         """
         if hint==None and keyword==None and image_type == None:
-            return f"""
+            if external_background:
+                return f"""
+                # 角色
+                你是一位专攻显示技术的教授。你正在为博士生制作一份考试数据集。
+
+                # 输入数据
+ 
+                - **上下文文本**: 见用户消息。
+                - **视觉内容**: 见用户图片。
+                - **从RAG系统得到的和改图片与上下文相关的外部背景知识**: {external_background}
+
+               
+
+                # 任务
+                **严格**基于提供的图片和上下文，创建一个高质量的问答（QA）对。
+
+                # 要求
+                1. **问题**: 避免像“图片里有什么？”这样的宽泛问题。相反，应针对可见的具体结构、数据数值或机制进行提问。
+                2. **上下文**: 只用来帮助题目出题，包括必要的背景信息，并不会直接提供给学生。
+                3. **题干设计**问题题干需要足够完整，如果涉及到了非知识性的背景信息或者要考察的部分知识点需要额外的补充说明要在题干里加入必要的说明，但不可过于具体，但不能直接引用上下文内容，以防止学生直接复制粘贴答案。不要出现如文中，结合上下文等表述。
+                3. **答案**: 必须能从提供的视觉或问题题干中推导出来，同时问题与答案要和图片需要紧密关联。
+                4. **避免幻觉**: 问题和答案不要凭空捏造输入中未包含的外部知识和背景，所有证据必须严格基于提供的图片或者设计的题干中的信息，且不能和上下文冲突。
+                5. **推理**: 逻辑清晰地解释答案是如何从视觉特征或问题文本中推导出来的。
+                6. **问题风格**: 简单直白，不需要复杂的推理，主要考察是否理解知识点，避免问题出现。且问题要紧密结合图片内容，上下文只是提供参考知识。
+                7. **答案风格**: 答案需要具体且详尽，避免简单的“是”或“否”，需要解释清楚。如果出现了相关的知识和背景，需要一并在题干解释清楚。
+
+                # 输出格式 (仅 JSON)
+                {{
+                    "question": "技术性问题",
+                    "answer": "详细的答案",
+                    "explanation": "基于视觉/公共知识证据的逐步推导过程"
+                }}
+                """
+            
+            else:
+                return f"""
                 # 角色
                 你是一位专攻显示技术的教授。你正在为博士生制作一份考试数据集。
 
@@ -444,13 +480,14 @@ class AsyncLabelingPipeline:
                     hint = HintFactory.get_hint(l3_tag, image_type)
 
                 # 2. 构建 Prompt
-                system_prompt = self.build_vqa_generation_prompt(l3_tag, image_type, hint,keyword)
+                kg_caption = run_single_test(self.rag, item_with_class['image_path'], item_with_class.get('caption_expanded', ''))
+                system_prompt = self.build_vqa_generation_prompt(l3_tag, image_type, hint,keyword, external_background= kg_caption)
                
                 # 重新读取图片 (或者在内存中传递 base64，取决于你的内存策略)
                 # 这里假设 item 里还存着路径
                 google_input_contents = [
                     system_prompt,
-                    f"图片标题:{item_with_class.get('figure_title', '')} \n\n 图片相关上下文{item_with_class.get('related_text_strong', '')}",
+                    f"图片标题:{item_with_class.get('figure_title', '')} \n\n 图片相关上下文{item_with_class.get('caption_expanded', '')}",
                     await self.client.files.upload(file=item_with_class["image_path"]),
                     types.Part.from_bytes(
                         data = open(item_with_class["image_path"], "rb").read(),
@@ -653,10 +690,11 @@ async def main():
     # data["id"] = data.index
     # data.columns
  
-    data = pd.read_csv("/Users/Shared/taxonomy_pipeline/keyword_results3.2.csv")
+    #data = pd.read_csv("/Users/Shared/taxonomy_pipeline/keyword_results3.2.csv")
+    data = pd.read_json("/home/maxzhang/datapipeline/temp_images/expanded_captions_kg.json")
     data["id"] = range(1, len(data) + 1)
-    data["figure_title"] = data["figure_title"].apply(lambda x: filter_str(x))
-    data["image_path"] = data["image_path"].apply(lambda x: "temp_images/"+x.split("/")[-1])
+    # data["figure_title"] = data["figure_title"].apply(lambda x: filter_str(x))
+    data["image_path"] = data["image_path"].apply(lambda x: "./temp_images/"+x.split("/")[-1])
     print(data.head())
     dataset = data
     # with open("/mnt/storage/dataset/PPVL_reuslts_CN/json_file/filter_qiuping_all_deduplicated_v0.3.1.json","r") as f:
@@ -680,19 +718,16 @@ async def main():
     output_df = pd.DataFrame(results)
     print("\n🎉 处理完成！结果预览：")
 
-    output_df = output_df[["image_path","figure_title","related_text_strong","generated_question","generated_answer","pass", "score","filter_reason"]]
-    output_df.to_csv("keyword_results3.2.csv", index=False)
+    # output_df = output_df[["image_path","figure_title","related_text_strong","generated_question","generated_answer","pass", "score","filter_reason"]]
+    output_df.to_csv("./temp_images/keyword_results3.2.csv", index=False)
     print(output_df.head())
     # 保存为 JSONL 或 CSV 供下一步使用
     # with open("keyword_results34.json","w") as f:
     #     json.dump(results,f,ensure_ascii=False)
-    output_df.to_json("keyword_results34.json", orient="records", force_ascii=False)
-    # update original table with the column keyword
+    output_df.to_json("./temp_images/keyword_results_added_vqa_kg.json", orient="records", force_ascii=False)
     
-    print("\n🔄 开始更新 DuckDB 原始表...")
-    
-    store_database=False
-    
+    print("💾 结果已保存到 ./temp_images/keyword_results_added_vqa_kg.json")
+
 if __name__ == "__main__":
     # Windows/Jupyter 环境可能需要 nest_asyncio
     # import nest_asyncio
