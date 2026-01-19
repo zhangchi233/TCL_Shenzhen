@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from trl import PPOTrainer
-from pareto_utils import calculate_pareto_mask
+from pareto_utils import calculate_pareto_mask,calculate_pareto_mask_soft_with_crowding
 
 class ParetoPPOTrainer(PPOTrainer):
     def __init__(self, *args, **kwargs):
@@ -49,8 +49,10 @@ class ParetoPPOTrainer(PPOTrainer):
         flat_ent = resp_entropy.flatten()
         
         # 调用我们在 Step 1 写的工具
-        pareto_keep_mask = calculate_pareto_mask(flat_adv, flat_ent)
-        
+        pareto_keep_mask, crowding_distance = calculate_pareto_mask_soft_with_crowding(flat_adv, flat_ent,
+                                                                                       alpha = 0.8, keep_ratio=0.3,
+                                                                                       crowding_weight=0.5)
+
         # 恢复形状 [Batch, Seq_Len]
         pareto_keep_mask = pareto_keep_mask.view_as(advantages)
         
