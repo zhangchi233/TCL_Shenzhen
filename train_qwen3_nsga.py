@@ -64,6 +64,24 @@ def parse_args():
     parser.add_argument("--epsilon", type=float, default=0.2,
                         help="PPO clip epsilon")
     
+    # vLLM 配置
+    parser.add_argument("--use_vllm", action="store_true", default=True,
+                        help="是否使用 vLLM 进行推理")
+    parser.add_argument("--vllm_device", type=str, default="cuda:0",
+                        help="vLLM 使用的设备")
+    parser.add_argument("--vllm_gpu_memory_utilization", type=float, default=0.3,
+                        help="vLLM GPU 内存使用率 (colocate 模式建议 0.2-0.4)")
+    parser.add_argument("--vllm_dtype", type=str, default="bfloat16",
+                        choices=["float16", "bfloat16", "auto"],
+                        help="vLLM 数据类型")
+    parser.add_argument("--vllm_max_model_len", type=int, default=8192,
+                        help="vLLM 最大模型长度")
+    parser.add_argument("--vllm_enable_prefix_caching", action="store_true", default=True,
+                        help="启用 vLLM prefix caching")
+    parser.add_argument("--vllm_tensor_parallel_size", type=int, default=1,
+                        help="vLLM tensor parallel size")
+    
+    
     # 其他配置
     parser.add_argument("--seed", type=int, default=42,
                         help="随机种子")
@@ -258,9 +276,19 @@ def main():
         save_steps=args.save_steps,
         save_total_limit=3,
         
+        # vLLM 参数
+        use_vllm=args.use_vllm,
+        vllm_device=args.vllm_device,
+        vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization,
+        vllm_dtype=args.vllm_dtype,
+        vllm_max_model_len=args.vllm_max_model_len,
+        vllm_enable_prefix_caching=args.vllm_enable_prefix_caching,
+        vllm_tensor_parallel_size=args.vllm_tensor_parallel_size,
+        
+        
         # 其他
         seed=args.seed,
-        report_to="wandb" if args.use_wandb else "none",
+        report_to="wandb" if args.use_wandb else "tensorboard",
         
         # 生成参数
         temperature=0.7,
