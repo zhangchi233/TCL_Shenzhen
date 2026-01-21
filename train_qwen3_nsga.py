@@ -45,9 +45,9 @@ def parse_args():
                         help="梯度累积步数")
     parser.add_argument("--learning_rate", type=float, default=1e-6,
                         help="学习率")
-    parser.add_argument("--max_completion_length", type=int, default=512,
+    parser.add_argument("--max_completion_length", type=int, default=8192,
                         help="最大生成长度")
-    parser.add_argument("--num_generations", type=int, default=4,
+    parser.add_argument("--num_generations", type=int, default=64,
                         help="每个 prompt 生成的样本数")
     
     # NSGA 配置
@@ -178,8 +178,10 @@ def prepare_dataset(dataset_name: str, tokenizer, max_samples: int = None):
     print(f"Loading dataset: {dataset_name}")
     
     try:
-        dataset = load_dataset(dataset_name, split="train")
+        dataset_path = "/mnt/data/MLLM/zc/TCL_Shenzhen/dataset/train-00000-of-00001 (1).parquet"
+        dataset = load_dataset("parquet", data_files=dataset_path, split="train")
     except Exception as e:
+        raise e
         print(f"Failed to load {dataset_name}, trying alternative...")
         # 备选数据集
         dataset = load_dataset("openai/gsm8k", "main", split="train")
@@ -206,7 +208,7 @@ def prepare_dataset(dataset_name: str, tokenizer, max_samples: int = None):
         
         return {"prompt": prompt}
     
-    dataset = dataset.map(format_prompt, remove_columns=dataset.column_names)
+    dataset = dataset.map(format_prompt)
     
     return dataset
 
@@ -239,7 +241,6 @@ def main():
         args.model_name,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16 if args.bf16 else torch.float32,
-        device_map="auto",
         attn_implementation="flash_attention_2",  # 使用 Flash Attention 2
     )
     
@@ -278,12 +279,13 @@ def main():
         
         # vLLM 参数
         use_vllm=args.use_vllm,
-        vllm_device=args.vllm_device,
+        # vllm_device=args.vllm_device,
+        vllm_mode="colocate",
         vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization,
-        vllm_dtype=args.vllm_dtype,
-        vllm_max_model_len=args.vllm_max_model_len,
-        vllm_enable_prefix_caching=args.vllm_enable_prefix_caching,
-        vllm_tensor_parallel_size=args.vllm_tensor_parallel_size,
+        # vllm_dtype=args.vllm_dtype,
+        vllm_max_model_length=args.vllm_max_model_len,
+        # vllm_enable_prefix_caching=args.vllm_enable_prefix_caching,
+        # vllm_tensor_parallel_size=args.vllm_tensor_parallel_size,
         
         
         # 其他
