@@ -384,12 +384,18 @@ class CoTDistillationPipeline:
 # ==========================================
 # 主函数
 # ==========================================
+from argparse import ArgumentParser
+arg_parser = ArgumentParser()
+arg_parser.add_argument("--api_key", type=str, default="AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw", help="Google API Key")
+arg_parser.add_argument("--input_file", type=str, default="/home/maxzhang/datapipeline/temp_images/vqa.json", help="输入 JSON 文件路径")
+arg_parser.add_argument("--output_file", type=str, default="/home/maxzhang/datapipeline/temp_images/cot_distilled_output.json", help="输出 JSON 文件路径")
+args = arg_parser.parse_args()
 
 async def main():
     # 配置
-    GOOGLE_API_KEY = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"  # 替换为你的 API Key
-    INPUT_FILE = "/home/maxzhang/datapipeline/temp_images/vqa.json"  # 输入文件
-    OUTPUT_FILE = "/home/maxzhang/datapipeline/temp_images/cot_distilled_output.json"  # 输出文件
+    GOOGLE_API_KEY = args.api_key
+    INPUT_FILE = args.input_file  # 输入文件
+    OUTPUT_FILE = args.output_file  # 输出文件
     
     # 加载数据
     print(f"📂 加载数据: {INPUT_FILE}")

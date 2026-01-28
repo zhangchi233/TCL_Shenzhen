@@ -254,6 +254,7 @@ async def google_call(async_client,image,prompt):
         cache[image] = upload_file
         print(f"📤 新上传图片: {image}")
     try:
+        response 
         response = await async_client.models.generate_content(
                         model = "gemini-3-flash-preview",
                         contents= [
@@ -279,7 +280,8 @@ async def google_call(async_client,image,prompt):
             await asyncio.sleep(10)
             return await google_call(async_client,image,prompt)
         else:
-            raise e
+            print(e)
+            return None,0,0
 async def openai_call(client,image,prompt,model):
     def encode_image(image):
         import base64
@@ -301,7 +303,15 @@ async def openai_call(client,image,prompt,model):
 # ==========================================
 # 模拟执行流程 (Pipeline)
 # ==========================================
+
 async def process_single_caption(image,caption, context,use_openai=False,model ="gpt-4-vision-preview",api_key = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"):
+    try:
+        return await _process_single_caption(image,caption, context,use_openai=model,api_key=api_key)
+    except Exception as e:
+        print(f"Error processing image {image}: {e}")
+        return None
+async def _process_single_caption(image,caption, context,use_openai=False,model ="gpt-4-vision-preview",api_key = "AIzaSyCjhCgDEZ05AGFkRWSGRRPCOWULbvvjOlw"):
+    
     if use_openai:
         client = AsyncOpenAI(api_key=api_key)
     else:
@@ -358,29 +368,36 @@ def main_pipeline(image_inputs, original_caption_inputs,contexts,cores = 16):
         ]
         async with lock:
             tasks = await asyncio.gather(*tasks)
-        return tasks
+        return [task for task in tasks if task !=None]
     return asyncio.run(gather_tasks(lock))
+from argparse import ArgumentParser
+
+parser = ArgumentParser(description="Process image captions")
+parser.add_argument("--data", type=str, default="/home/maxzhang/datapipeline/sub_merged_caption_2.json", help="Path to the input data JSON file")
+parser.add_argument("--img_path", type=str, default="/home/maxzhang/img_selected", help="Path to the directory containing images")
+parser.add_argument("--save_path", type=str, default="expanded_captions.json", help="Path to save the output JSON file")
+args = parser.parse_args()
+
 if __name__=="__main__":
     import json 
-    data = "/home/maxzhang/datapipeline/history_storage/temp2.json"
+    data = args.data
+    IMG_PATH = args.img_path
     data = json.load(open(data))
     images,captions,contexts = [],[],[]
     for sample in data:
         img = sample["images"][0]
-        img = os.path.join("./temp_images",img.split("/")[-1])
+        #print(sample)
+        img = os.path.join(IMG_PATH,img.split("/")[-3],img.split("/")[-1]) if "max_selected" not in img else os.path.join(IMG_PATH,img.split("/")[-2],img.split("/")[-1])
         caption = sample["caption"]
-        context = sample["title"] + "/n/n"+"/n".join(sample["related_text"])
+        context = sample["title"] +"\n".join(sample.get("sub_titles",[])) + "\n\n" + "\n".join(sample["related_text"])
         images.append(img)
         captions.append(caption)
         contexts.append(context)
     results = main_pipeline(images,captions,contexts,cores=16)
     
+    save_path = args.save_path
+    with open(save_path,"w") as f:
+        json.dump(results,f,ensure_ascii=False,indent=2)
     print("average token count:", sum([r["total_token_count"] for r in results])/len(results))
     print("average prompt token count:", sum([r["prompt_token_count"] for r in results])/len(results))
-    with open("./temp_images/expanded_captions_new.json","w") as f:
-        json.dump(results,f,ensure_ascii=False,indent=2)
-        
-        
-    
-    
-    
+

@@ -6,7 +6,7 @@ import pandas as pd
 import io
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
-from hintfactory import HintFactory
+from datapipeline.caption_generation.hintfactory import HintFactory
 from google import genai
 from google.genai import types
 # ==========================================
@@ -778,20 +778,23 @@ async def main():
     # data.columns
  
     #data = pd.read_csv("/Users/Shared/taxonomy_pipeline/keyword_results3.2.csv")
-    data = pd.read_json("/home/maxzhang/datapipeline/temp_images/sumed_data.json")
+    from argparse import ArgumentParser
+    import json
+    parser = ArgumentParser()
+    parser.add_argument("--api_key", type=str, default="d075fa90-7412-4208-9776-188332b1f2f9", help="API Key for LLM service")
+    parser.add_argument("--input_json", type=str, default="/home/maxzhang/datapipeline/temp_images/sumed_data.json", help="Input JSON file path")
+    parser.add_argument("--output_json", type=str, default="/home/maxzhang/datapipeline/temp_images/keyword_results_added_vqa_with_background.json", help="Output JSON file path")
+    
+    
+    args = parser.parse_args()
+    data_input = args.input_json
+    data_output = args.output_json
+    data = pd.read_json(data_input)
     data["id"] = range(1, len(data) + 1)
     # data["figure_title"] = data["figure_title"].apply(lambda x: filter_str(x))
-    data["image_path"] = data["image_path"].apply(lambda x: "./temp_images/"+x.split("/")[-1])
+    #data["image_path"] = data["image_path"].apply(lambda x: "./temp_images/"+x.split("/")[-1])
     print(data.head())
     dataset = data
-    # with open("/mnt/storage/dataset/PPVL_reuslts_CN/json_file/filter_qiuping_all_deduplicated_v0.3.1.json","r") as f:
-    #     dataset = json.load(f)[:20]
-    dataset = dataset.sample(n=min(100,len(dataset))).to_dict('records')
-    # for i in range(len(dataset)):
-    #     dataset[i]["id"] = i+1
-    # # 为了演示，创建一个假的本地图片文件，防止代码报错
-    # os.makedirs("test_images", exist_ok=True)
-
 
     # 2. 初始化 Pipeline
     pipeline = AsyncLabelingPipeline(api_key=API_KEY, taxonomy_csv=TAXONOMY_CSV)
@@ -805,14 +808,9 @@ async def main():
     output_df = pd.DataFrame(results)
     print("\n🎉 处理完成！结果预览：")
 
-    # output_df = output_df[["image_path","figure_title","related_text_strong","generated_question","generated_answer","pass", "score","filter_reason"]]
-    output_df.to_csv("keyword_results3.2.csv", index=False)
-    print(output_df.head())
-    # 保存为 JSONL 或 CSV 供下一步使用
-    # with open("keyword_results34.json","w") as f:
-    #     json.dump(results,f,ensure_ascii=False)
-    path = "/home/maxzhang/datapipeline/temp_images/keyword_results_added_vqa_with_background.json"
-    output_df.to_json(path, orient="records", force_ascii=False)
+
+    
+    output_df.to_json(data_output, orient="records", force_ascii=False)
     #output_df.to_json("/home/maxzhang/datapipeline/temp_images/keyword_results_added_vqa_with_background.json", orient="records", force_ascii=False)
     # update original table with the column keyword
     

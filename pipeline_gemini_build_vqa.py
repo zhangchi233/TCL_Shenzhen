@@ -6,7 +6,7 @@ import pandas as pd
 import io
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
-from hintfactory import HintFactory
+from datapipeline.caption_generation.hintfactory import HintFactory
 from google import genai
 from google.genai import types
 # ==========================================
@@ -629,44 +629,27 @@ async def main():
 
     # print(response.text)async def main():
     USE_HINT=False
-    # import duckdb
-    # db="/mnt/storage/database/db.duckdb"
-    # con = duckdb.connect(db)
-    # TABLE_NAME = "semiconductor_batch_4_1"
-    # try:
-    #     con.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN IF NOT EXISTS extracted_keywords JSON")
-    #     con.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN IF NOT EXISTS extraction_reasoning VARCHAR")
-    #     con.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN IF NOT EXISTS with_meta_data_results JSON")
-    #     con.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN IF NOT EXISTS without_meta_data_results JSON")
-        
-        
-    #     print("✅ 表结构检查完毕 (列已存在或已添加)")
-    # except Exception as e:
-    #     print(f"⚠️ 添加列时遇到提示 (可能已存在): {e}")
     
-    
-    # data = con.execute(f"""select * from {TABLE_NAME} where with_meta_data_results is null""")
+    import argparse
+    arg_parser = argparse.ArgumentParser(description="Async Labeling Pipeline")
+    arg_parser.add_argument("--input_path", type=str, required=True, help="Path to input JSON file")
+    arg_parser.add_argument("--output_path", type=str, required=True, help="Path to output JSON file")
+    args = arg_parser.parse_args()
     
     
     
     # data=data.fetchdf()
     # data["id"] = data.index
+    input_path = args.input_path
+    output_path = args.output_path
     # data.columns
  
     #data = pd.read_csv("/Users/Shared/taxonomy_pipeline/keyword_results3.2.csv")
-    data = pd.read_json("/home/maxzhang/datapipeline/temp_images/expanded_captions_new.json")
+    data = pd.read_json(input_path)
     data["id"] = range(1, len(data) + 1)
-    # data["figure_title"] = data["figure_title"].apply(lambda x: filter_str(x))
-    data["image_path"] = data["image_path"].apply(lambda x: "./temp_images/"+x.split("/")[-1])
-    print(data.head())
+
     dataset = data
-    # with open("/mnt/storage/dataset/PPVL_reuslts_CN/json_file/filter_qiuping_all_deduplicated_v0.3.1.json","r") as f:
-    #     dataset = json.load(f)[:20]
-    dataset = dataset.sample(n=min(50,len(dataset))).to_dict('records')
-    # for i in range(len(dataset)):
-    #     dataset[i]["id"] = i+1
-    # # 为了演示，创建一个假的本地图片文件，防止代码报错
-    # os.makedirs("test_images", exist_ok=True)
+
 
 
     # 2. 初始化 Pipeline
@@ -681,13 +664,10 @@ async def main():
     output_df = pd.DataFrame(results)
     print("\n🎉 处理完成！结果预览：")
 
-    # output_df = output_df[["image_path","figure_title","related_text_strong","generated_question","generated_answer","pass", "score","filter_reason"]]
-    output_df.to_csv("keyword_results3.2.csv", index=False)
-    print(output_df.head())
-    # 保存为 JSONL 或 CSV 供下一步使用
+
     # with open("keyword_results34.json","w") as f:
     #     json.dump(results,f,ensure_ascii=False)
-    output_df.to_json("keyword_results_added_vqa.json", orient="records", force_ascii=False)
+    output_df.to_json(output_path, orient="records", force_ascii=False)
     # update original table with the column keyword
     
     print("\n🔄 开始更新 DuckDB 原始表...")
