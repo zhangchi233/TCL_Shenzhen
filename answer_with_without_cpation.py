@@ -6,7 +6,7 @@ import pandas as pd
 import io
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
-from hintfactory import HintFactory
+from datapipeline.caption_generation.hintfactory import HintFactory
 from google import genai
 from google.genai import types
 # ==========================================

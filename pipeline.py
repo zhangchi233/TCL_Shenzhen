@@ -6,7 +6,7 @@ import pandas as pd
 import io
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
-from hintfactory import HintFactory
+from datapipeline.caption_generation.hintfactory import HintFactory
 # ==========================================
 # 1. 配置与定义
 # ==========================================

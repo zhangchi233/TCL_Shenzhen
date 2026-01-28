@@ -8,7 +8,7 @@ import io
 from rag.rag import run_single_test
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
-from hintfactory import HintFactory
+from datapipeline.caption_generation.hintfactory import HintFactory
 from google import genai
 from google.genai import types
 def parse_json_list(json_data: str) -> list:
