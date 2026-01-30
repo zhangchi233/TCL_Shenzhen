@@ -254,7 +254,7 @@ def parse_by_render(md_text: str):
     return final_json
 import torch
 import gc
-# from volcenginesdkarkruntime import AsyncArk
+from volcenginesdkarkruntime import AsyncArk
 
 
 class GeneratorConfig:
